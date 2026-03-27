@@ -8,26 +8,23 @@ import { useRouter } from "next/navigation";
 const CreateMovie = () => {
   const navigate = useRouter();
   return (
-    <div>
-      <div className="flex items-start justify-between">
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded flex items-center justify-center">
-              <Undo2
-                className="w-7 h-7 text-black cursor-pointer"
-                onClick={() => navigate.back()}
-              />
-            </div>
-          </div>
-          <h1 className="text-5xl font-bold leading-none tracking-tight">
-            Add Movies
+    <div className="min-h-screen p-6">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center gap-3 mb-8">
+          <Undo2 className="w-6 h-6" onClick={() => navigate.back()} />
+        </div>
+
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">
+            Create New Movie
           </h1>
-          <p className="text-md text-zinc-500 max-w-sm">
-            Create and publish new movie and their respective slots
+          <p className="text-lg text-gray-600">
+            Add a new movie and configure its show times and seat availability
           </p>
         </div>
+
+        <MovieForm />
       </div>
-      <MovieForm />
     </div>
   );
 };

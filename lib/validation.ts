@@ -5,6 +5,20 @@ export const loginSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters."),
 });
 
+export const signupSchema = z
+  .object({
+    name: z.string().min(2, "Name must be at least 2 characters."),
+    email: z.string().email("Enter a valid email."),
+    password: z.string().min(6, "Password must be at least 6 characters."),
+    confirmPassword: z
+      .string()
+      .min(6, "Password must be at least 6 characters."),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
+
 export const movieSchema = z.object({
   title: z.string().min(2, "Movie title is required."),
   genre: z.string().min(2, "Genre is required."),
@@ -35,6 +49,7 @@ export const bookingCustomerSchema = z.object({
 });
 
 export type LoginFormValues = z.infer<typeof loginSchema>;
+export type SignupFormValues = z.infer<typeof signupSchema>;
 export type MovieFormValues = z.infer<typeof movieSchema>;
 export type ShowtimeFormValues = z.infer<typeof showtimeSchema>;
 export type BookingCustomerFormValues = z.infer<typeof bookingCustomerSchema>;
