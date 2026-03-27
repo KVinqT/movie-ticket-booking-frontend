@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Online Movie Ticket Booking System",
+  title: "TicketFlix",
   description: "Frontend demo with role-based views for admin and normal user.",
 };
 

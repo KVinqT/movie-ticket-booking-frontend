@@ -1,25 +1,25 @@
 "use client";
 
 import { LogOut, Shield, Ticket, UserCircle2 } from "lucide-react";
-
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { type User } from "@/lib/mock-data";
+import { UserStar } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 type AppHeaderProps = {
   currentUser: User;
-  onLogout: () => void;
+  onLogout?: () => void;
 };
 
 export function AppHeader({ currentUser, onLogout }: AppHeaderProps) {
+  const navigate = useRouter();
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-primary">
-            Online Movie Ticket Booking System
-          </h1>
+          <h1 className="text-2xl font-bold text-primary">TicketFlix</h1>
           <p className="text-sm text-muted-foreground">
             User: May Phyu Han Khin
           </p>
@@ -27,7 +27,7 @@ export function AppHeader({ currentUser, onLogout }: AppHeaderProps) {
         <div className="flex flex-wrap items-center gap-3">
           <Badge variant="secondary" className="gap-1">
             <UserCircle2 size={14} />
-            {currentUser.name}
+            {currentUser.userName}
           </Badge>
           <Badge className="gap-1">
             {currentUser.role === "admin" ? (
@@ -37,6 +37,15 @@ export function AppHeader({ currentUser, onLogout }: AppHeaderProps) {
             )}
             {currentUser.role.toUpperCase()}
           </Badge>
+          {currentUser.role === "user" && (
+            <Button
+              variant="outline"
+              onClick={() => navigate.push("/client/profile")}
+            >
+              <UserStar className="mr-1" size={16} />
+              View Profile
+            </Button>
+          )}
           <Button variant="outline" onClick={onLogout}>
             <LogOut className="mr-1" size={16} />
             Logout

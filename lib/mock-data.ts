@@ -1,35 +1,6 @@
+import { Slot } from "@/app/admin/movies/_components/columns";
+
 export type Role = "admin" | "user";
-
-export type User = {
-  id: string;
-  name: string;
-  email: string;
-  password: string;
-  role: Role;
-};
-
-export type Seat = {
-  id: string;
-  label: string;
-  isBooked: boolean;
-};
-
-export type Showtime = {
-  id: string;
-  time: string;
-  price: number;
-  seats: Seat[];
-};
-
-export type Movie = {
-  id: string;
-  title: string;
-  genre: string;
-  durationMinutes: number;
-  description: string;
-  posterUrl: string;
-  showtimes: Showtime[];
-};
 
 export type Booking = {
   id: string;
@@ -46,76 +17,53 @@ export type Booking = {
   bookedAt: string;
 };
 
-const createSeats = (
-  count: number,
-  bookedSeatIndexes: number[] = [],
-): Seat[] => {
-  return Array.from({ length: count }, (_, index) => {
-    const row = String.fromCharCode(65 + Math.floor(index / 8));
-    const col = (index % 8) + 1;
-    return {
-      id: `seat-${index + 1}`,
-      label: `${row}${col}`,
-      isBooked: bookedSeatIndexes.includes(index),
-    };
-  });
+export type User = {
+  id: string;
+  userName: string;
+  phoneNumber: string;
+  email: string;
+  password: string;
+  role: Role;
+  bookedInfo?: Array<{
+    movieName: string;
+    moviePoster: string;
+    bookTime: string;
+    showDate: string;
+    slots: Slot;
+  }>;
 };
 
 export const mockUsers: User[] = [
   {
     id: "u-admin",
-    name: "Cinema Admin",
+    userName: "Cinema Admin",
     email: "admin@movie.com",
+    phoneNumber: "097823737",
     password: "admin123",
     role: "admin",
   },
   {
     id: "u-user",
-    name: "May Phyu",
+    userName: "May Phyu",
     email: "user@movie.com",
+    phoneNumber: "0923723733",
     password: "user123",
     role: "user",
-  },
-];
-
-export const initialMovies: Movie[] = [
-  {
-    id: "m1",
-    title: "Shadow Protocol",
-    genre: "Action",
-    durationMinutes: 125,
-    description: "A fast-paced action thriller with world-class stunts.",
-    posterUrl:
-      "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1000&q=80",
-    showtimes: [
+    bookedInfo: [
       {
-        id: "s1",
-        time: "2026-03-15T13:30:00",
-        price: 8,
-        seats: createSeats(40, [2, 6, 10, 11, 14]),
-      },
-      {
-        id: "s2",
-        time: "2026-03-15T18:00:00",
-        price: 10,
-        seats: createSeats(40, [0, 1, 8, 9, 16, 17]),
-      },
-    ],
-  },
-  {
-    id: "m2",
-    title: "Green Horizon",
-    genre: "Sci-Fi",
-    durationMinutes: 118,
-    description: "A futuristic journey to save humanity from climate collapse.",
-    posterUrl:
-      "https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=1000&q=80",
-    showtimes: [
-      {
-        id: "s3",
-        time: "2026-03-15T15:45:00",
-        price: 9,
-        seats: createSeats(32, [3, 4, 18, 19]),
+        movieName: "Spider Man",
+        moviePoster:
+          "https://cdn1.epicgames.com/offer/f696430be718494fac1d6542cfb22542/EGS_MarvelsSpiderManMilesMorales_InsomniacGamesNixxesSoftware_S2_1200x1600-58989e7116de3f70a2ae6ea56ee202c6",
+        bookTime: "16:30PM",
+        showDate: "2026-04-15T18:30:00Z",
+        slots: {
+          id: "1",
+          slotName: "A-01",
+          slotType: "Normal Seat",
+          slotPrice: "7000 MMK",
+          movieId: "1",
+          isReserved: true,
+        },
       },
     ],
   },
