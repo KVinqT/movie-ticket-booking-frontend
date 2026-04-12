@@ -16,39 +16,38 @@ import { Label } from "@/components/ui/label";
 import { type LoginFormValues, loginSchema } from "@/lib/validation";
 
 type LoginFormProps = {
-  onSubmit: (values: LoginFormValues) => void;
-  error: string;
+  onSubmit: (values: LoginFormValues) => void | Promise<void>;
 };
 
-export function LoginForm({ onSubmit, error }: LoginFormProps) {
-  const loginForm = useForm<LoginFormValues>({
+export function LoginForm({ onSubmit }: LoginFormProps) {
+  const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-    },
+    defaultValues: { email: "", password: "" },
   });
+
+  const { isSubmitting } = form.formState;
 
   return (
     <Card className="border-primary/40 bg-card/95 backdrop-blur">
       <CardHeader>
         <CardTitle className="text-2xl">Movie Ticket Booking</CardTitle>
         <CardDescription>
-          Login with a demo account. One page supports both admin and normal
-          user roles.
+          Sign in to your account to browse movies and book tickets.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={loginForm.handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
-              placeholder="admin@movie.com"
-              {...loginForm.register("email")}
+              type="email"
+              placeholder="you@example.com"
+              autoComplete="email"
+              {...form.register("email")}
             />
             <p className="text-xs text-red-400">
-              {loginForm.formState.errors.email?.message}
+              {form.formState.errors.email?.message}
             </p>
           </div>
           <div className="space-y-2">
@@ -56,15 +55,15 @@ export function LoginForm({ onSubmit, error }: LoginFormProps) {
             <Input
               id="password"
               type="password"
-              {...loginForm.register("password")}
+              autoComplete="current-password"
+              {...form.register("password")}
             />
             <p className="text-xs text-red-400">
-              {loginForm.formState.errors.password?.message}
+              {form.formState.errors.password?.message}
             </p>
           </div>
-          {error ? <p className="text-sm text-red-400">{error}</p> : null}
-          <Button type="submit" className="w-full">
-            Login
+          <Button type="submit" className="w-full" disabled={isSubmitting}>
+            {isSubmitting ? "Signing in…" : "Login"}
           </Button>
         </form>
       </CardContent>

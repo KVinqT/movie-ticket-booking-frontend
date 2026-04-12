@@ -1,63 +1,37 @@
 "use client";
 
 import { ColumnDef } from "@tanstack/react-table";
-import Image from "next/image";
 import Link from "next/link";
 import { SquarePen } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { MoviePoster } from "@/components/shared/MoviePoster";
 import { DeleteDialog } from "./deleteDialog";
+import type { AdminMovie } from "@/lib/api/types";
+import { formatDate } from "@/lib/date";
 
-export type Slot = {
-  id: string;
-  slotName: string;
-  slotType: string;
-  slotPrice: string;
-  movieId: string;
-  isReserved: boolean;
-};
-
-export type Movie = {
-  id: string;
-  movieName: string;
-  director: string;
-  moviePoster: string;
-  genre: string;
-  description: string;
-  showDate: string; //UTC format ISO string
-  casts?: string[];
-  showTimes?: string[];
-  slots?: Slot[];
-};
-
-export const columns: ColumnDef<Movie>[] = [
+export const columns: ColumnDef<AdminMovie>[] = [
   {
     accessorKey: "id",
     header: "ID",
+    cell: ({ row }) => (
+      <span className="text-zinc-400 text-xs">#{row.original.id}</span>
+    ),
   },
   {
-    accessorKey: "movieName",
-    header: "Movie Name",
+    accessorKey: "movie_name",
+    header: "Movie",
     cell: ({ row }) => {
-      const moviePoster = row.original.moviePoster;
-      const movieName = row.original.movieName;
-
+      const { movie_poster_url, movie_name, id } = row.original;
       return (
         <div className="flex items-center gap-3">
-          {/* Poster Image */}
-          <div className="relative h-20 w-20 overflow-hidden rounded-md border bg-muted">
-            <Image
-              src={moviePoster}
-              alt={movieName}
-              className="h-full w-full object-cover"
-              width={50}
-              height={50}
-            />
-          </div>
-          <Link
-            href={`/admin/movies/${row.original.id}`}
-            className="hover:underline"
-          >
+          <MoviePoster
+            src={movie_poster_url}
+            alt={movie_name}
+            containerClassName="h-16 w-12"
+          />
+          <Link href={`/admin/movies/${id}`} className="hover:underline">
             <span className="font-medium text-foreground leading-none">
-              {movieName}
+              {movie_name}
             </span>
           </Link>
         </div>
@@ -67,42 +41,57 @@ export const columns: ColumnDef<Movie>[] = [
   {
     accessorKey: "director",
     header: "Director",
+    cell: ({ row }) => (
+      <span className="text-sm">{row.original.director}</span>
+    ),
   },
   {
     accessorKey: "genre",
     header: "Genre",
+    cell: ({ row }) => (
+      <Badge variant="outline" className="text-xs font-normal">
+        {row.original.genre}
+      </Badge>
+    ),
   },
   {
     accessorKey: "description",
     header: "Description",
-    cell: ({ row }) => {
-      const description = row.original.description.slice(0, 25) + "....";
-      return <div>{description ?? "-"}</div>;
-    },
+    cell: ({ row }) => (
+      <p className="text-zinc-500 text-sm max-w-xs truncate">
+        {row.original.description}
+      </p>
+    ),
   },
   {
-    accessorKey: "showDate",
-    header: "Date of show",
+    id: "creator",
+    header: "Added by",
+    cell: ({ row }) => (
+      <span className="text-xs text-zinc-500">{row.original.creator.name}</span>
+    ),
+  },
+  {
+    accessorKey: "created_at",
+    header: "Added",
+    cell: ({ row }) => (
+      <span className="text-xs text-zinc-500">
+        {formatDate(row.original.created_at)}
+      </span>
+    ),
   },
   {
     id: "actions",
     header: "Actions",
     cell: ({ row }) => {
       const movie = row.original;
-
       return (
         <div className="flex items-center gap-2">
-          {/* Edit Button */}
-          <Link
-            href={`/admin/movies/edit/${movie.id}`}
-            className="cursor-pointer"
-          >
-            <SquarePen className="w-5 h-5" />
+          <Link href={`/admin/movies/edit/${movie.id}`}>
+            <SquarePen className="w-5 h-5 text-zinc-500 hover:text-zinc-900 transition-colors" />
           </Link>
-
           <DeleteDialog
             id={movie.id}
-            entityName={movie.movieName}
+            entityName={movie.movie_name}
             confirmContext="Delete Movie"
           />
         </div>

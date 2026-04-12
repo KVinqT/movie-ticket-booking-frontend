@@ -1,196 +1,101 @@
 "use client";
 
-import { Separator } from "@/components/ui/separator";
-import { Undo2 } from "lucide-react";
+import { use, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
-
-import React from "react";
-import { Movie } from "@/app/admin/movies/_components/columns";
+import { Undo2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import Slots from "@/components/shared/Slots";
+import { MoviePoster } from "@/components/shared/MoviePoster";
+import { useMovie } from "@/lib/api/admin/movies";
+import { useCreateBooking } from "@/lib/api/client/bookings";
+import { useAuth } from "@/components/providers/auth-provider";
+import { deriveSeatsFromShowtime } from "@/lib/api/types";
+import type { ServerShowtime } from "@/lib/api/types";
+import { formatShowtime, formatDate } from "@/lib/date";
 
-const BookMovie = ({
-  id = "1",
-  movieName = "Spider Man",
-  director = "Christopher Nolan",
-  moviePoster = "https://cdn1.epicgames.com/offer/f696430be718494fac1d6542cfb22542/EGS_MarvelsSpiderManMilesMorales_InsomniacGamesNixxesSoftware_S2_1200x1600-58989e7116de3f70a2ae6ea56ee202c6",
-  genre = "Sci-Fi",
-  showTimes = ["16:30PM", "10:00AM"],
-  description = "A team of explorers travel through a wormhole in space in an attempt to ensure humanity's survival.",
-  showDate = "2026-04-15T18:30:00Z",
-  slots = [
-    {
-      id: "1",
-      slotName: "A-01",
-      slotType: "Normal Seat",
-      slotPrice: "7000 MMK",
-      movieId: "1",
-      isReserved: false,
-    },
-    {
-      id: "2",
-      slotName: "A-02",
-      slotType: "Normal Seat",
-      slotPrice: "7000 MMK",
-      movieId: "1",
-      isReserved: false,
-    },
-    {
-      id: "3",
-      slotName: "A-03",
-      slotType: "Normal Seat",
-      slotPrice: "7000 MMK",
-      movieId: "1",
-      isReserved: false,
-    },
-    {
-      id: "4",
-      slotName: "A-04",
-      slotType: "Normal Seat",
-      slotPrice: "7000 MMK",
-      movieId: "1",
-      isReserved: false,
-    },
-    {
-      id: "5",
-      slotName: "B-01",
-      slotType: "Premium Seat",
-      slotPrice: "10000 MMK",
-      movieId: "1",
-      isReserved: false,
-    },
-    {
-      id: "6",
-      slotName: "B-02",
-      slotType: "Premium Seat",
-      slotPrice: "10000 MMK",
-      movieId: "1",
-      isReserved: false,
-    },
-    {
-      id: "7",
-      slotName: "B-03",
-      slotType: "Premium Seat",
-      slotPrice: "10000 MMK",
-      movieId: "1",
-      isReserved: false,
-    },
-    {
-      id: "8",
-      slotName: "B-04",
-      slotType: "Premium Seat",
-      slotPrice: "10000 MMK",
-      movieId: "1",
-      isReserved: false,
-    },
-    {
-      id: "9",
-      slotName: "C-01",
-      slotType: "Couple Seat",
-      slotPrice: "15000 MMK",
-      movieId: "1",
-      isReserved: false,
-    },
-    {
-      id: "10",
-      slotName: "C-02",
-      slotType: "Couple Seat",
-      slotPrice: "15000 MMK",
-      movieId: "1",
-      isReserved: false,
-    },
-    {
-      id: "11",
-      slotName: "C-02",
-      slotType: "Couple Seat",
-      slotPrice: "15000 MMK",
-      movieId: "1",
-      isReserved: false,
-    },
-    {
-      id: "12",
-      slotName: "C-03",
-      slotType: "Couple Seat",
-      slotPrice: "15000 MMK",
-      movieId: "1",
-      isReserved: true,
-    },
-    {
-      id: "13",
-      slotName: "A-05",
-      slotType: "Normal Seat",
-      slotPrice: "7000 MMK",
-      movieId: "1",
-      isReserved: false,
-    },
-    {
-      id: "14",
-      slotName: "B-05",
-      slotType: "Premium Seat",
-      slotPrice: "7000 MMK",
-      movieId: "1",
-      isReserved: false,
-    },
-    {
-      id: "15",
-      slotName: "B-06",
-      slotType: "Premium Seat",
-      slotPrice: "7000 MMK",
-      movieId: "1",
-      isReserved: true,
-    },
-  ],
-}: Partial<Movie>) => {
+type Props = { params: Promise<{ id: string }> };
+
+export default function BookMoviePage({ params }: Props) {
+  const { id } = use(params);
   const navigate = useRouter();
+  const { currentUser } = useAuth();
+  const movieId = Number(id);
+
+  const { data: movie, isLoading, isError } = useMovie(movieId);
+  const { mutateAsync: book, isPending: isBooking } = useCreateBooking(movieId);
+
+  const [selectedShowtime, setSelectedShowtime] = useState<ServerShowtime | null>(null);
+  // Incremented after each booking to reset the Slots component's internal state
+  const [slotsKey, setSlotsKey] = useState(0);
+
+  // Only show scheduled showtimes to clients
+  const scheduledShowtimes = useMemo(
+    () => movie?.showtimes.filter((st) => st.status === "scheduled") ?? [],
+    [movie],
+  );
+
+  const activeShowtime = selectedShowtime ?? scheduledShowtimes[0] ?? null;
+
+  // Derive seat availability from the embedded theater + booking data
+  const seats = useMemo(
+    () => (activeShowtime ? deriveSeatsFromShowtime(activeShowtime) : []),
+    [activeShowtime],
+  );
+
+  const handleBook = async (seatIds: number[]) => {
+    if (!activeShowtime || !currentUser) return;
+    await book({
+      user_id: currentUser.id,
+      showtime_id: activeShowtime.id,
+      seats: seatIds,
+    });
+    // Bump key to reset selected-seats state inside Slots
+    setSlotsKey((k) => k + 1);
+  };
+
+  if (isLoading) {
+    return <div className="py-20 text-center text-zinc-400">Loading…</div>;
+  }
+  if (isError || !movie) {
+    return <div className="py-20 text-center text-red-400">Movie not found.</div>;
+  }
+
   return (
-    <div className="flex flex-col gap-8">
-      <Undo2
-        className="w-7 h-7 text-black cursor-pointer"
+    <div className="flex flex-col gap-8 max-w-5xl mx-auto px-6">
+      <button
         onClick={() => navigate.back()}
-      />
-      <div className="relative w-full overflow-hidden rounded-xl min-h-55">
-        <div className="absolute inset-0">
-          {/* dark gradient left-to-right */}
-          <div className="absolute inset-0 bg-linear-to-r from-black via-black/80 to-[#0a0e1e]/35" />
-          {/* subtle bottom fade */}
-          <div className="absolute inset-0 bg-linear-to-t from-[#0a0e1e]/60 to-transparent" />
-        </div>
+        className="flex items-center gap-2 text-zinc-500 hover:text-zinc-900 transition-colors w-fit"
+      >
+        <Undo2 className="w-5 h-5" />
+        <span className="text-sm">Back</span>
+      </button>
 
-        {/* ── Content ── */}
+      {/* ── Movie Hero ── */}
+      <div className="relative w-full overflow-hidden rounded-xl min-h-52 bg-zinc-900">
+        <div className="absolute inset-0 bg-linear-to-r from-black via-black/80 to-black/30" />
         <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start gap-7 px-7 py-8">
-          {/* Poster */}
-          <div className="relative shrink-0 w-38 h-48 rounded-lg shadow-[0_8px_40px_rgba(0,0,0,0.7)] overflow-hidden border">
-            <Image
-              src={moviePoster}
-              alt={movieName}
-              fill
-              className="object-cover"
-            />
-          </div>
+          <MoviePoster
+            src={movie.movie_poster_url}
+            alt={movie.movie_name}
+            containerClassName="shrink-0 w-32 h-44 rounded-lg shadow-xl"
+          />
 
-          {/* Info */}
           <div className="flex flex-col gap-3 min-w-0">
-            {/* Title */}
-            <h1 className="text-white leading-tight font-bold text-4xl md:text-5xl lg:text-6xl tracking-tighter">
-              {movieName}
+            <h1 className="text-white font-bold text-4xl md:text-5xl tracking-tight">
+              {movie.movie_name}
             </h1>
-
-            {/* Overview */}
-            <p className="text-sm leading-relaxed max-w-xl text-[#b4bedc]/85">
-              {description}
+            <p className="text-sm text-zinc-400 max-w-xl leading-relaxed">
+              {movie.description}
             </p>
-
-            {/* Meta row */}
-            <div className="flex flex-wrap items-start gap-10 pt-2">
+            <div className="flex flex-wrap items-start gap-8 pt-1">
               {[
-                { label: "Director", value: director },
-                { label: "Casts", value: showTimes },
-                { label: "Genre", value: genre },
-                { label: "To Show Date", value: showDate },
+                { label: "Director", value: movie.director },
+                { label: "Genre", value: movie.genre },
+                { label: "Added", value: formatDate(movie.created_at) },
               ].map(({ label, value }) => (
                 <div key={label} className="flex flex-col gap-0.5">
-                  <span className="text-[10px] font-bold tracking-[0.18em] uppercase text-[#96a5c8]/70">
+                  <span className="text-[10px] font-bold tracking-widest uppercase text-zinc-500">
                     {label}
                   </span>
                   <span className="text-white text-sm font-semibold">
@@ -202,21 +107,71 @@ const BookMovie = ({
           </div>
         </div>
       </div>
-      <div className="flex items-center gap-2 flex-wrap">
-        {showTimes.map((showTime) => (
-          <Badge
-            key={showTime}
-            variant="outline"
-            className="text-xs px-3 py-1 cursor-pointer tracking-wide font-normal border transition-colors bg-transparent border-zinc-800 hover:text-white hover:bg-black"
-          >
-            {showTime}
-          </Badge>
-        ))}
-      </div>
-      <Separator className="bg-zinc-800" />
-      <Slots slots={slots} />
+
+      {/* ── Showtime Selector ── */}
+      {scheduledShowtimes.length > 0 ? (
+        <div className="space-y-3">
+          <h2 className="text-sm font-bold tracking-widest uppercase text-zinc-500">
+            Select Showtime
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {scheduledShowtimes.map((st) => (
+              <button
+                key={st.id}
+                onClick={() => {
+                  setSelectedShowtime(st);
+                  setSlotsKey((k) => k + 1);
+                }}
+                className={[
+                  "px-4 py-2 rounded-lg text-sm font-medium border transition-all text-left",
+                  activeShowtime?.id === st.id
+                    ? "bg-zinc-900 text-white border-zinc-900"
+                    : "border-zinc-200 bg-white hover:border-zinc-400",
+                ].join(" ")}
+              >
+                <span className="block">{formatShowtime(st.show_datetime)}</span>
+                <span className="block text-xs opacity-60 mt-0.5">
+                  {st.theater.name}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="text-zinc-400 text-sm">No upcoming showtimes available.</p>
+      )}
+
+      <Separator />
+
+      {/* ── Seat Grid ── */}
+      {activeShowtime ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="font-semibold text-lg">Choose Your Seats</h2>
+            <Badge variant="outline" className="text-zinc-500 font-normal">
+              {formatDate(activeShowtime.show_datetime)} ·{" "}
+              {activeShowtime.theater.name}
+            </Badge>
+          </div>
+
+          {seats.length === 0 ? (
+            <div className="py-10 text-center text-zinc-400">
+              No seats configured for this showtime.
+            </div>
+          ) : (
+            <Slots
+              key={slotsKey}
+              seats={seats}
+              onBook={handleBook}
+              isBooking={isBooking}
+            />
+          )}
+        </div>
+      ) : (
+        <p className="text-zinc-400 text-sm">
+          Select a showtime to see available seats.
+        </p>
+      )}
     </div>
   );
-};
-
-export default BookMovie;
+}

@@ -1,34 +1,42 @@
 "use client";
 
-import { LogOut, Shield, Ticket, UserCircle2 } from "lucide-react";
+import { LogOut, Shield, Ticket, UserCircle2, UserCog } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { type User } from "@/lib/mock-data";
-import { UserStar } from "lucide-react";
+import type { User } from "@/lib/api/types";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/providers/auth-provider";
 
 type AppHeaderProps = {
   currentUser: User;
-  onLogout?: () => void;
 };
 
-export function AppHeader({ currentUser, onLogout }: AppHeaderProps) {
+export function AppHeader({ currentUser }: AppHeaderProps) {
   const navigate = useRouter();
+  const { logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate.replace("/auth");
+  };
+
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-primary">TicketFlix</h1>
           <p className="text-sm text-muted-foreground">
-            User: May Phyu Han Khin
+            Welcome back, {currentUser.name}
           </p>
         </div>
+
         <div className="flex flex-wrap items-center gap-3">
           <Badge variant="secondary" className="gap-1">
             <UserCircle2 size={14} />
-            {currentUser.userName}
+            {currentUser.name}
           </Badge>
+
           <Badge className="gap-1">
             {currentUser.role === "admin" ? (
               <Shield size={14} />
@@ -37,16 +45,19 @@ export function AppHeader({ currentUser, onLogout }: AppHeaderProps) {
             )}
             {currentUser.role.toUpperCase()}
           </Badge>
-          {currentUser.role === "user" && (
+
+          {currentUser.role === "client" && (
             <Button
               variant="outline"
+              size="sm"
               onClick={() => navigate.push("/client/profile")}
             >
-              <UserStar className="mr-1" size={16} />
-              View Profile
+              <UserCog className="mr-1" size={16} />
+              Profile
             </Button>
           )}
-          <Button variant="outline" onClick={onLogout}>
+
+          <Button variant="outline" size="sm" onClick={handleLogout}>
             <LogOut className="mr-1" size={16} />
             Logout
           </Button>

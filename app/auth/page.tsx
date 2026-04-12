@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { LoginForm } from "@/components/auth/login-form";
@@ -10,40 +10,27 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { type LoginFormValues, type SignupFormValues } from "@/lib/validation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export default function LoginPage() {
+export default function AuthPage() {
   const router = useRouter();
-  const { currentUser, login } = useAuth();
-  const [loginError, setLoginError] = useState("");
-  const [signupError, setSignupError] = useState("");
+  const { currentUser, login, register } = useAuth();
 
   useEffect(() => {
-    if (currentUser) {
-      router.replace("/");
-    }
+    if (currentUser) router.replace("/");
   }, [currentUser, router]);
 
-  const handleLogin = (values: LoginFormValues) => {
-    const result = login(values.email, values.password);
-    if (!result.success) {
-      setLoginError(result.message ?? "Invalid credentials");
-      return;
-    }
-
-    setLoginError("");
-    router.replace("/");
+  const handleLogin = async (values: LoginFormValues) => {
+    const ok = await login(values.email, values.password);
+    if (ok) router.replace("/");
   };
 
-  const handleSignup = (values: SignupFormValues) => {
-    // For now, we'll use the same login function with the provided credentials
-    // In a real app, you would call a signup API endpoint first
-    const result = login(values.email, values.password);
-    if (!result.success) {
-      setSignupError(result.message ?? "Signup failed");
-      return;
-    }
-
-    setSignupError("");
-    router.replace("/");
+  const handleSignup = async (values: SignupFormValues) => {
+    const ok = await register(
+      values.name,
+      values.email,
+      values.password,
+      values.confirmPassword,
+    );
+    if (ok) router.replace("/");
   };
 
   return (
@@ -64,10 +51,10 @@ export default function LoginPage() {
             <TabsTrigger value="signup">Sign Up</TabsTrigger>
           </TabsList>
           <TabsContent value="login">
-            <LoginForm onSubmit={handleLogin} error={loginError} />
+            <LoginForm onSubmit={handleLogin} />
           </TabsContent>
           <TabsContent value="signup">
-            <SignupForm onSubmit={handleSignup} error={signupError} />
+            <SignupForm onSubmit={handleSignup} />
           </TabsContent>
         </Tabs>
       </div>

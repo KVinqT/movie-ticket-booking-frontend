@@ -1,0 +1,38 @@
+---
+alwaysApply: true
+---
+
+# Utility Function Rules
+
+All utility/helper functions live in the `lib/` folder at the project root.
+
+## Required file structure inside lib/
+
+lib/
+date.ts ← formatShowtime, formatDate, isShowExpired, getRelativeTime
+currency.ts ← formatPrice, calculateTotal, calculateDiscount
+seats.ts ← groupSeatsByRow, isSeatAvailable, getSeatLabel, parseSeatId
+booking.ts ← generateBookingRef, getBookingStatusLabel, isBookingCancellable
+movies.ts ← filterMoviesByGenre, sortMoviesByDate, searchMovies
+api.ts ← shared fetch wrapper, error handler, response normalizer
+
+## Rules
+
+- Every utility must be a pure function — no side effects, no API calls, no React hooks
+- Every utility must be a named export — no default exports in lib/
+- Every utility must have a JSDoc comment:
+  /\*\*
+  - Groups a flat seat array into rows keyed by row_label.
+  - @param seats - flat SeatAvailability[] from the API
+  - @returns Record<string, SeatAvailability[]>
+    \*/
+- Never import React or any component into lib/ files
+- Never import from app/ or components/ inside lib/
+- lib/api.ts is the only file allowed to make fetch calls
+
+## When to extract to lib/
+
+- Any array .map() / .filter() / .sort() with business logic inside a component → move to lib/
+- Any date formatting → move to lib/date.ts
+- Any price calculation → move to lib/currency.ts
+- Any seat-related transformation → move to lib/seats.ts

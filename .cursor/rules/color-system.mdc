@@ -1,0 +1,40 @@
+---
+alwaysApply: true
+---
+
+# Color System Rules
+
+This project uses ONLY black, white, and gray shades as its color palette.
+All color decisions must use CSS variables defined in `theme.css` at the project root.
+
+## Allowed tokens
+
+- `var(--color-black)` → #000000
+- `var(--color-white)` → #ffffff
+- `var(--color-gray-50)` through `var(--color-gray-900)` for all shading needs
+
+## Semantic aliases to use in components
+
+- `var(--color-bg)` — page background
+- `var(--color-bg-subtle)` — subtle section backgrounds
+- `var(--color-surface)` — card/panel surfaces
+- `var(--color-border)` — borders and dividers
+- `var(--color-text)` — primary text
+- `var(--color-text-muted)` — secondary/muted text
+- `var(--color-text-faint)` — placeholder/disabled text
+
+## Forbidden
+
+- Never use named colors: red, blue, green, yellow, etc.
+- Never hardcode hex values except #000, #fff, #000000, #ffffff
+- Never use rgba() with any values other than 0,0,0 or 255,255,255
+- Never use Tailwind color utilities like `text-blue-500`, `bg-red-400`, `border-green-200`
+- The files `globals.css` and `dashboard.css` must also follow these rules
+
+## Handling states without color
+
+- Hover: change `background` using a gray token, not a colored one
+- Focus: use `outline: var(--border-width-thick) solid var(--color-black)`
+- Error: use bold border + an icon or text label — NOT red text or red borders
+- Disabled: apply `opacity: 0.4` to the element
+- Active/selected: use `background: var(--color-black)` with `color: var(--color-white)`

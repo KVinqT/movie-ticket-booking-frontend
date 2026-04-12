@@ -16,20 +16,16 @@ import { Label } from "@/components/ui/label";
 import { type SignupFormValues, signupSchema } from "@/lib/validation";
 
 type SignupFormProps = {
-  onSubmit: (values: SignupFormValues) => void;
-  error: string;
+  onSubmit: (values: SignupFormValues) => void | Promise<void>;
 };
 
-export function SignupForm({ onSubmit, error }: SignupFormProps) {
-  const signupForm = useForm<SignupFormValues>({
+export function SignupForm({ onSubmit }: SignupFormProps) {
+  const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
-    defaultValues: {
-      name: "",
-      email: "",
-      password: "",
-      confirmPassword: "",
-    },
+    defaultValues: { name: "", email: "", password: "", confirmPassword: "" },
   });
+
+  const { isSubmitting } = form.formState;
 
   return (
     <Card className="border-primary/40 bg-card/95 backdrop-blur">
@@ -40,30 +36,30 @@ export function SignupForm({ onSubmit, error }: SignupFormProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form
-          onSubmit={signupForm.handleSubmit(onSubmit)}
-          className="space-y-4"
-        >
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">Full Name</Label>
             <Input
               id="name"
               placeholder="John Doe"
-              {...signupForm.register("name")}
+              autoComplete="name"
+              {...form.register("name")}
             />
             <p className="text-xs text-red-400">
-              {signupForm.formState.errors.name?.message}
+              {form.formState.errors.name?.message}
             </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="signup-email">Email</Label>
             <Input
               id="signup-email"
-              placeholder="user@movie.com"
-              {...signupForm.register("email")}
+              type="email"
+              placeholder="you@example.com"
+              autoComplete="email"
+              {...form.register("email")}
             />
             <p className="text-xs text-red-400">
-              {signupForm.formState.errors.email?.message}
+              {form.formState.errors.email?.message}
             </p>
           </div>
           <div className="space-y-2">
@@ -71,10 +67,11 @@ export function SignupForm({ onSubmit, error }: SignupFormProps) {
             <Input
               id="signup-password"
               type="password"
-              {...signupForm.register("password")}
+              autoComplete="new-password"
+              {...form.register("password")}
             />
             <p className="text-xs text-red-400">
-              {signupForm.formState.errors.password?.message}
+              {form.formState.errors.password?.message}
             </p>
           </div>
           <div className="space-y-2">
@@ -82,15 +79,15 @@ export function SignupForm({ onSubmit, error }: SignupFormProps) {
             <Input
               id="confirm-password"
               type="password"
-              {...signupForm.register("confirmPassword")}
+              autoComplete="new-password"
+              {...form.register("confirmPassword")}
             />
             <p className="text-xs text-red-400">
-              {signupForm.formState.errors.confirmPassword?.message}
+              {form.formState.errors.confirmPassword?.message}
             </p>
           </div>
-          {error ? <p className="text-sm text-red-400">{error}</p> : null}
-          <Button type="submit" className="w-full">
-            Sign Up
+          <Button type="submit" className="w-full" disabled={isSubmitting}>
+            {isSubmitting ? "Creating account…" : "Sign Up"}
           </Button>
         </form>
       </CardContent>

@@ -1,115 +1,176 @@
 "use client";
 
-import { useAuth } from "@/components/providers/auth-provider";
-import EditProfileDialog from "@/components/shared/EditProfileDialog";
-import { Button } from "@/components/ui/button";
-import { Undo2 } from "lucide-react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { Undo2, User2, Mail, CalendarDays, Ticket } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { MoviePoster } from "@/components/shared/MoviePoster";
+import EditProfileDialog from "@/components/shared/EditProfileDialog";
+import { useAuth } from "@/components/providers/auth-provider";
+import { useUserProfile } from "@/lib/api/client/users";
+import { formatShowtime, formatDate } from "@/lib/date";
+import { formatPrice } from "@/lib/currency";
+import { getBookingStatusLabel } from "@/lib/booking";
+import type { BookingStatus } from "@/lib/api/types";
 
-const Profile = () => {
+function statusVariant(status: BookingStatus) {
+  switch (status) {
+    case "confirmed": return "default";
+    case "pending":   return "secondary";
+    default:          return "outline";
+  }
+}
+
+export default function ProfilePage() {
   const { currentUser } = useAuth();
-
   const navigate = useRouter();
+
+  const { data: profile, isLoading, isError } = useUserProfile(
+    currentUser?.id ?? 0,
+  );
 
   if (!currentUser) return null;
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-10 space-y-6">
-      <Undo2
-        className="w-7 h-7 text-black cursor-pointer"
+    <div className="max-w-5xl mx-auto px-6 py-4 space-y-8">
+      <button
         onClick={() => navigate.back()}
-      />
-      {/* ================= USER HEADER ================= */}
+        className="flex items-center gap-2 text-zinc-500 hover:text-zinc-900 transition-colors w-fit"
+      >
+        <Undo2 className="w-5 h-5" />
+        <span className="text-sm">Back</span>
+      </button>
+
+      {/* ── User Card ── */}
       <div className="border rounded-xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-6 bg-white shadow-sm">
-        <div>
-          <h1 className="text-2xl font-bold">{currentUser.userName}</h1>
-          <p className="text-zinc-500">{currentUser.email}</p>
-          <p className="text-zinc-500">{currentUser.phoneNumber}</p>
+        {/* Avatar + info */}
+        <div className="flex items-center gap-5">
+          <div className="w-16 h-16 rounded-full bg-zinc-100 border flex items-center justify-center shrink-0">
+            <User2 className="w-7 h-7 text-zinc-400" />
+          </div>
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold">{currentUser.name}</h1>
+            <div className="flex items-center gap-1.5 text-zinc-500 text-sm">
+              <Mail className="w-3.5 h-3.5" />
+              {currentUser.email}
+            </div>
+            <div className="flex items-center gap-1.5 text-zinc-400 text-xs">
+              <CalendarDays className="w-3 h-3" />
+              Member since {formatDate(currentUser.created_at)}
+            </div>
+          </div>
         </div>
 
-        <div className="flex justify-center items-center gap-3">
+        <div className="flex items-center gap-3">
           <EditProfileDialog />
-          <div className="text-sm px-4 py-2 rounded-md bg-black text-white capitalize">
-            {currentUser.role}
-          </div>
+          <Badge className="capitalize">{currentUser.role}</Badge>
         </div>
       </div>
 
-      {/* ================= BOOKINGS ================= */}
-      <div className="space-y-6">
-        <h2 className="text-2xl font-semibold">Your Bookings</h2>
+      <Separator />
 
-        {currentUser.bookedInfo?.length === 0 ? (
-          <p className="text-zinc-400">No bookings yet.</p>
+      {/* ── Bookings ── */}
+      <div className="space-y-5">
+        <div className="flex items-center gap-2">
+          <Ticket className="w-5 h-5 text-zinc-500" />
+          <h2 className="text-xl font-semibold">Your Bookings</h2>
+          {profile && (
+            <span className="text-xs text-zinc-400 ml-1">
+              ({profile.bookings.length})
+            </span>
+          )}
+        </div>
+
+        {isLoading ? (
+          <div className="py-10 text-center text-zinc-400">Loading…</div>
+        ) : isError ? (
+          <div className="py-10 text-center text-red-400">
+            Failed to load bookings.
+          </div>
+        ) : !profile || profile.bookings.length === 0 ? (
+          <p className="text-zinc-400 text-sm">No bookings yet.</p>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {currentUser.bookedInfo &&
-              currentUser.bookedInfo.map((booking, index) => (
+          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {profile.bookings.map((booking) => {
+              const { movie, theater } = booking.showtime;
+              const seatNames = booking.seats.map((bs) => bs.seat.seat_name);
+
+              return (
                 <div
-                  key={index}
-                  className="group border rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition"
+                  key={booking.id}
+                  className="group border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition"
                 >
                   {/* Poster */}
-                  <div className="relative w-full h-64">
-                    <Image
-                      src={booking.moviePoster}
-                      alt={booking.movieName}
-                      fill
-                      className="object-cover group-hover:scale-105 transition duration-500"
+                  <div className="relative w-full h-52 bg-zinc-900 overflow-hidden">
+                    <MoviePoster
+                      src={movie.movie_poster_url}
+                      alt={movie.movie_name}
+                      containerClassName="absolute inset-0 w-full h-full rounded-none border-none"
                     />
-
-                    {/* overlay */}
                     <div className="absolute inset-0 bg-black/40" />
+                    <div className="absolute top-3 right-3">
+                      <Badge
+                        variant={statusVariant(booking.status)}
+                        className="text-[10px]"
+                      >
+                        {getBookingStatusLabel(booking.status)}
+                      </Badge>
+                    </div>
                   </div>
 
                   {/* Info */}
                   <div className="p-4 space-y-3">
-                    <h3 className="font-semibold text-lg">
-                      {booking.movieName}
+                    <h3 className="font-semibold text-base leading-tight">
+                      {movie.movie_name}
                     </h3>
 
-                    <div className="text-sm text-zinc-600 space-y-1">
+                    <div className="text-xs text-zinc-500 space-y-1">
                       <p>
-                        🎬 Show Time:{" "}
-                        <span className="font-medium">{booking.bookTime}</span>
+                        Showtime:{" "}
+                        <span className="font-medium text-zinc-700">
+                          {formatShowtime(booking.showtime.show_datetime)}
+                        </span>
                       </p>
-
                       <p>
-                        📅 Date:{" "}
-                        <span className="font-medium">
-                          {new Date(booking.showDate).toLocaleDateString()}
+                        Theater:{" "}
+                        <span className="font-medium text-zinc-700">
+                          {theater.name}
+                        </span>
+                      </p>
+                      <p>
+                        Ref:{" "}
+                        <span className="font-mono font-medium text-zinc-700">
+                          {booking.booking_ref}
                         </span>
                       </p>
                     </div>
 
-                    {/* Seat */}
-                    <div className="flex items-center justify-between pt-2 border-t">
-                      <span className="text-xs text-zinc-500">Seat</span>
-
-                      <span className="px-3 py-1 text-xs rounded-md bg-black text-white">
-                        {booking.slots.slotName}
-                      </span>
+                    {/* Seats */}
+                    <div className="flex flex-wrap gap-1 pt-2 border-t">
+                      {seatNames.map((name) => (
+                        <span
+                          key={name}
+                          className="px-2 py-0.5 text-xs rounded bg-zinc-100 font-mono border border-zinc-200"
+                        >
+                          {name}
+                        </span>
+                      ))}
                     </div>
 
-                    {/* Seat Type + Price */}
-                    <div className="flex justify-between text-sm">
-                      <span className="text-zinc-500">
-                        {booking.slots.slotType}
-                      </span>
-
-                      <span className="font-semibold">
-                        {booking.slots.slotPrice}
+                    {/* Total */}
+                    <div className="flex justify-between items-center pt-2 border-t">
+                      <span className="text-xs text-zinc-500">Total paid</span>
+                      <span className="font-semibold text-sm">
+                        {formatPrice(booking.total_amount)}
                       </span>
                     </div>
                   </div>
                 </div>
-              ))}
+              );
+            })}
           </div>
         )}
       </div>
     </div>
   );
-};
-
-export default Profile;
+}

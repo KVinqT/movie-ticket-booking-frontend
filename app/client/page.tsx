@@ -1,134 +1,108 @@
 "use client";
 
-import Image from "next/image";
-import Link from "next/link";
-import React from "react";
+import { useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Search, Clapperboard } from "lucide-react";
+import { useClientMovies } from "@/lib/api/client/movies";
+import { MOVIE_GENRES } from "@/lib/constants";
+import { filterMoviesByGenre, searchMovies } from "@/lib/movies";
+import { MovieCard } from "./_components/MovieCard";
 
-/* ---------------- MOVIE DATA ---------------- */
+export default function ClientMoviesPage() {
+  const { data: allMovies = [], isLoading, isError } = useClientMovies();
+  const [genre, setGenre] = useState<string>("All");
+  const [query, setQuery] = useState("");
 
-const movies = [
-  {
-    id: "1",
-    movieName: "Spider Man",
-    director: "Christopher Nolan",
-    moviePoster:
-      "https://cdn1.epicgames.com/offer/f696430be718494fac1d6542cfb22542/EGS_MarvelsSpiderManMilesMorales_InsomniacGamesNixxesSoftware_S2_1200x1600-58989e7116de3f70a2ae6ea56ee202c6",
-    genre: "Sci-Fi",
-    description:
-      "A team of explorers travel through a wormhole in space in an attempt to ensure humanity's survival.",
-    showDate: "2026-04-15T18:30:00Z",
-  },
-  {
-    id: "2",
-    movieName: "Bat Man",
-    director: "Wes Anderson",
-    moviePoster:
-      "https://play-lh.googleusercontent.com/FrlpHqOdNtyOcuHeoPrRXbsXMg_lzoSazxb3i9ewKFouTmUTn1nv5zm4VuhomETvOAIHrcfu3sjgk05rYaAS",
-    genre: "Comedy/Drama",
-    description:
-      "A writer encounters the owner of a high-class hotel, who tells him of his early years as a lobby boy.",
-    showDate: "2026-04-16T14:00:00Z",
-  },
-  {
-    id: "3",
-    movieName: "Demon Slayer",
-    director: "Bong Joon-ho",
-    moviePoster:
-      "https://image.api.playstation.com/vulcan/ap/rnd/202504/1707/0e5cfd44d28684cc12f2abc131f309a93a2165fd9f76e403.jpg",
-    genre: "Thriller",
-    description:
-      "Greed and class discrimination threaten the newly formed symbiotic relationship between the wealthy family and the destitute clan.",
-    showDate: "2026-04-17T20:00:00Z",
-  },
-  {
-    id: "4",
-    movieName: "Catch Me If You Can",
-    director: "Hayao Miyazaki",
-    moviePoster:
-      "https://cdn2.penguin.com.au/covers/original/9781742747231.jpg",
-    genre: "Animation",
-    description:
-      "A young girl wanders into a world ruled by gods, witches, and spirits.",
-    showDate: "2026-04-18T10:30:00Z",
-  },
-  {
-    id: "5",
-    movieName: "Wolf Of Wallstreet",
-    director: "Christopher Nolan",
-    moviePoster:
-      "https://upload.wikimedia.org/wikipedia/en/thumb/d/d8/The_Wolf_of_Wall_Street_%282013%29.png/250px-The_Wolf_of_Wall_Street_%282013%29.png",
-    genre: "Action",
-    description:
-      "Batman must accept one of the greatest psychological and physical tests to fight the Joker.",
-    showDate: "2026-04-18T21:00:00Z",
-  },
-];
+  // Merge hardcoded genres with any extra genres returned by the server
+  const genreOptions = useMemo(() => {
+    const serverGenres = allMovies.map((m) => m.genre).filter(Boolean);
+    const extra = serverGenres.filter(
+      (g) => !MOVIE_GENRES.includes(g as (typeof MOVIE_GENRES)[number]),
+    );
+    return [...MOVIE_GENRES, ...Array.from(new Set(extra))];
+  }, [allMovies]);
 
-/* ---------------- COMPONENT ---------------- */
+  const movies = useMemo(() => {
+    const byGenre = filterMoviesByGenre(allMovies, genre);
+    return searchMovies(byGenre, query);
+  }, [allMovies, genre, query]);
 
-const MoviesPage = () => {
   return (
-    <div className="max-w-6xl mx-auto px-6 py-10">
+    <div className="max-w-6xl mx-auto px-6 py-4 space-y-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Showing 🎬</h1>
-        <p className="text-muted-foreground">
-          Browse movies and book your seats
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <Clapperboard className="w-5 h-5 text-zinc-500" />
+          <span className="text-xs text-zinc-500 font-medium uppercase tracking-widest">
+            Now Showing
+          </span>
+        </div>
+        <h1 className="text-3xl font-bold tracking-tight">Browse Movies</h1>
+        <p className="text-zinc-500 text-sm">
+          Pick a genre, search by title or director, then book your seats.
         </p>
       </div>
 
-      {/* GRID */}
-      <div
-        className="
-    grid
-    justify-center
-    gap-6
-    grid-cols-[repeat(auto-fill,minmax(220px,220px))]
-  "
-      >
-        {movies.map((movie) => {
-          return (
-            <Link key={movie.id} href={`/client/movies/${movie.id}`}>
-              <div className="group relative w-[220px] h-[320px] rounded-xl overflow-hidden border shadow-sm cursor-pointer">
-                {/* Poster */}
-                <Image
-                  src={movie.moviePoster}
-                  alt={movie.movieName}
-                  fill
-                  className="object-cover transition-transform duration-500 group-hover:scale-110"
-                />
+      {/* Search + genre filters */}
+      <div className="space-y-4">
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search movies or directors…"
+            className="pl-9"
+          />
+        </div>
 
-                {/* Overlay */}
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition duration-300" />
-
-                {/* Hover Content */}
-                <div
-                  className="absolute inset-0 flex flex-col justify-end p-4 text-white
-                          opacity-0 translate-y-6
-                          group-hover:opacity-100 group-hover:translate-y-0
-                          transition-all duration-300"
-                >
-                  <h2 className="font-semibold text-sm line-clamp-1">
-                    {movie.movieName}
-                  </h2>
-
-                  <p className="text-xs text-white/80">{movie.genre}</p>
-
-                  <p className="text-xs mt-1 line-clamp-3 text-white/80">
-                    {movie.description}
-                  </p>
-
-                  <span className="text-xs font-medium mt-2">
-                    🎬 {new Date(movie.showDate).toLocaleDateString()}
-                  </span>
-                </div>
-              </div>
-            </Link>
-          );
-        })}
+        {/* Genre pills */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {genreOptions.map((g) => (
+            <Badge
+              key={g}
+              variant="outline"
+              onClick={() => setGenre(g)}
+              className={[
+                "text-xs px-3 py-1.5 cursor-pointer tracking-wide font-normal border transition-colors",
+                genre === g
+                  ? "bg-zinc-900 text-white border-zinc-900"
+                  : "bg-transparent border-zinc-300 hover:border-zinc-700 hover:bg-zinc-50",
+              ].join(" ")}
+            >
+              {g}
+            </Badge>
+          ))}
+        </div>
       </div>
+
+      {/* Results count */}
+      {!isLoading && !isError && (
+        <p className="text-xs text-zinc-400">
+          {movies.length === 0
+            ? "No movies found"
+            : `${movies.length} movie${movies.length === 1 ? "" : "s"} found`}
+        </p>
+      )}
+
+      {/* Movie grid */}
+      {isLoading ? (
+        <div className="py-20 text-center text-zinc-400">Loading…</div>
+      ) : isError ? (
+        <div className="py-20 text-center text-red-400">
+          Failed to load movies. Please try again.
+        </div>
+      ) : movies.length === 0 ? (
+        <div className="py-20 text-center text-zinc-400">
+          No movies match your search.
+        </div>
+      ) : (
+        <div className="grid justify-center gap-6 grid-cols-[repeat(auto-fill,minmax(200px,200px))]">
+          {movies.map((movie) => (
+            <MovieCard key={movie.id} movie={movie} />
+          ))}
+        </div>
+      )}
     </div>
   );
-};
-
-export default MoviesPage;
+}

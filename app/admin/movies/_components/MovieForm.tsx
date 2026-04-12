@@ -1,9 +1,17 @@
 "use client";
 
-import { useForm, useFieldArray, Controller } from "react-hook-form";
-import { z } from "zod";
+import { useRef, useState } from "react";
+import {
+  useForm,
+  useFieldArray,
+  Controller,
+  type Resolver,
+} from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Upload, X } from "lucide-react";
+import { Plus, Trash2, Upload, X, ImageOff } from "lucide-react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import {
   Field,
@@ -14,7 +22,6 @@ import {
   FieldSet,
   FieldTitle,
 } from "@/components/ui/field";
-
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,176 +32,237 @@ import {
   SelectItem,
   SelectValue,
 } from "@/components/ui/select";
-
 import { Card, CardContent } from "@/components/ui/card";
-import { useState, useRef } from "react";
-import Image from "next/image";
+import { Separator } from "@/components/ui/separator";
 
-/* ---------------- SCHEMA ---------------- */
+import {
+  createMovieFormSchema,
+  editMovieFormSchema,
+  type CreateMovieFormValues,
+  type EditMovieFormValues,
+} from "@/lib/validation";
+import { MOVIE_GENRES } from "@/lib/constants";
+import { useTheaters } from "@/lib/api/admin/theaters";
+import { useCreateMovie, useUpdateMovie } from "@/lib/api/admin/movies";
+import {
+  useCreateUpdateShowtimes,
+  toServerDatetime,
+} from "@/lib/api/admin/showtimes";
+import type { AdminMovie } from "@/lib/api/types";
 
-const slotSchema = z.object({
-  slotName: z.string(),
-  slotType: z.string(),
-  slotPrice: z.string(),
-});
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-const movieSchema = z.object({
-  movieName: z.string().min(1, "Movie name required"),
-  director: z.string().min(1, "Director required"),
-  moviePoster: z.string().min(1, "Movie poster required"),
-  genre: z.string().min(1, "Genre required"),
-  description: z.string().min(1, "Description required"),
-  showDate: z.string().min(1, "Show date required"),
-  casts: z.array(z.string()).optional(),
-  showTimes: z.array(z.string()).optional(),
-  slots: z.array(slotSchema).optional(),
-});
+type CreateMode = { mode: "create" };
+type EditMode = { mode: "edit"; movieId: number; initialData: AdminMovie };
+type MovieFormProps = CreateMode | EditMode;
 
-type MovieFormValues = z.infer<typeof movieSchema>;
+type FormValues = CreateMovieFormValues | EditMovieFormValues;
 
-/* ---------------- COMPONENT ---------------- */
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-export default function MovieForm() {
-  const form = useForm<MovieFormValues>({
-    resolver: zodResolver(movieSchema),
-    defaultValues: {
-      movieName: "",
-      director: "",
-      moviePoster: "",
-      genre: "",
-      description: "",
-      showDate: "",
-      casts: [],
-      showTimes: [],
-      slots: [],
-    },
-  });
+/** Placeholder sent to the server while real Cloudinary upload is not yet wired. */
+const MOCK_POSTER_URL =
+  "https://placehold.co/400x600/18181b/ffffff?text=Poster";
 
-  const { control, register, handleSubmit, formState, setValue, watch } = form;
-  const { errors } = formState;
+function blankShowtime() {
+  return { id: 0, theater_id: 0, show_datetime: "" };
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+export default function MovieForm(props: MovieFormProps) {
+  const isEdit = props.mode === "edit";
+  const navigate = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const posterImage = watch("moviePoster");
 
-  /* ---------- arrays ---------- */
+  const [posterPreview, setPosterPreview] = useState<string>(
+    isEdit ? (props as EditMode).initialData.movie_poster_url : ""
+  );
 
-  const castArrayMethods = useFieldArray({
-    control: control as never,
-    name: "casts",
-  });
-  const showTimesArrayMethods = useFieldArray({
-    control: control as never,
-    name: "showTimes",
-  });
-  const slotsArrayMethods = useFieldArray({
-    control: control as never,
-    name: "slots",
-  });
+  // Use the correct schema for each mode
+  const schema = isEdit ? editMovieFormSchema : createMovieFormSchema;
 
-  // For easier access, create aliases
-  const casts = castArrayMethods;
-  const showTimes = showTimesArrayMethods;
-  const slots = slotsArrayMethods;
-
-  /* ---------- IMAGE UPLOAD ---------- */
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setValue("moviePoster", reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const clearImage = () => {
-    setValue("moviePoster", "");
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
-
-  /* ---------- SLOT BUILDER ---------- */
-
-  const [rows, setRows] = useState(3);
-  const [cols, setCols] = useState(4);
-  const [slotType, setSlotType] = useState("Normal Seat");
-  const [slotPrice, setSlotPrice] = useState("7000 MMK");
-
-  const generateSlots = () => {
-    const generated = [];
-
-    for (let r = 0; r < rows; r++) {
-      const rowLetter = String.fromCharCode(65 + r);
-
-      for (let c = 1; c <= cols; c++) {
-        generated.push({
-          slotName: `${rowLetter}-${String(c).padStart(2, "0")}`,
-          slotType,
-          slotPrice,
-        });
+  const defaultValues: FormValues = isEdit
+    ? {
+        movie_name: (props as EditMode).initialData.movie_name,
+        director: (props as EditMode).initialData.director,
+        movie_poster_url: (props as EditMode).initialData.movie_poster_url,
+        genre: (props as EditMode).initialData.genre,
+        description: (props as EditMode).initialData.description,
+        showtimes: [blankShowtime()],
       }
+    : {
+        movie_name: "",
+        director: "",
+        movie_poster_url: "",
+        genre: "",
+        description: "",
+        showtimes: [blankShowtime()],
+      };
+
+  const {
+    control,
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+    setValue,
+    watch,
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema) as Resolver<FormValues>,
+    defaultValues,
+  });
+
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: "showtimes",
+  });
+
+  const posterUrlField = watch("movie_poster_url");
+
+  // Real theater list from API
+  const { data: theaters = [] } = useTheaters();
+
+  // Mutations
+  const { mutateAsync: createMovie } = useCreateMovie();
+  const { mutateAsync: updateMovie } = useUpdateMovie(
+    isEdit ? (props as EditMode).movieId : 0
+  );
+  const { mutateAsync: createUpdateShowtimes } = useCreateUpdateShowtimes();
+
+  // ── Poster handlers ──────────────────────────────────────────────────────────
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Show a local preview using object URL
+    const localUrl = URL.createObjectURL(file);
+    setPosterPreview(localUrl);
+    // Send a mock URL to the server (Cloudinary upload comes later)
+    setValue("movie_poster_url", MOCK_POSTER_URL, { shouldValidate: true });
+  };
+
+  const clearPoster = () => {
+    setPosterPreview("");
+    setValue("movie_poster_url", "");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // ── Submit ───────────────────────────────────────────────────────────────────
+
+  const onSubmit = async (data: FormValues) => {
+    try {
+      let movieId: number;
+
+      if (isEdit) {
+        const updated = await updateMovie({
+          movie_name: data.movie_name,
+          director: data.director,
+          genre: data.genre,
+          description: data.description,
+          ...(data.movie_poster_url
+            ? { movie_poster_url: data.movie_poster_url }
+            : {}),
+        });
+        movieId = updated.id;
+        toast.success("Movie updated successfully!");
+      } else {
+        const created = await createMovie({
+          movie_name: data.movie_name,
+          director: data.director,
+          movie_poster_url: data.movie_poster_url ?? MOCK_POSTER_URL,
+          genre: data.genre,
+          description: data.description,
+        });
+        movieId = created.id;
+      }
+
+      // Group showtimes by theater_id — one API call per theater
+      const grouped = data.showtimes.reduce<
+        Record<number, { id: number; show_datetime: string }[]>
+      >((acc, st) => {
+        if (!st.theater_id) return acc; // skip unselected rows
+        acc[st.theater_id] ??= [];
+        acc[st.theater_id].push({
+          id: st.id ?? 0,
+          show_datetime: toServerDatetime(st.show_datetime),
+        });
+        return acc;
+      }, {});
+
+      await Promise.all(
+        Object.entries(grouped).map(([theaterId, showtimes]) =>
+          createUpdateShowtimes({
+            movie_id: movieId,
+            theater_id: Number(theaterId),
+            showtimes,
+          })
+        )
+      );
+
+      if (!isEdit) toast.success("Movie & showtimes created successfully!");
+
+      navigate.push("/admin/movies");
+    } catch {
+      // Individual mutation errors are already toasted by the hooks
+      // Only catch unexpected failures here
+      toast.error("Something went wrong. Please try again.");
     }
-
-    slots.replace(generated);
   };
 
-  const onSubmit = (data: MovieFormValues) => {
-    console.log(data);
-  };
+  // ── Render ───────────────────────────────────────────────────────────────────
 
-  /* ------------------------------------------------ */
+  const showtimeErrors = (
+    errors as { showtimes?: { message?: string; root?: { message?: string } } }
+  ).showtimes;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 mt-8">
-      {/* ================= BASIC INFO ================= */}
-
-      <Card className="border shadow-sm">
+      {/* ── CARD 1: Movie Details ── */}
+      <Card>
         <CardContent className="p-6">
           <FieldSet>
-            <FieldTitle className="text-lg font-semibold text-gray-900 mb-6">
-              Basic Information
+            <FieldTitle className="text-lg font-semibold mb-6">
+              Movie Details
             </FieldTitle>
 
             <FieldGroup className="space-y-6">
-              {/* Movie Poster Upload */}
+              {/* Poster */}
               <Field>
-                <FieldLabel className="text-sm font-medium text-gray-700 mb-2">
-                  Movie Poster
-                </FieldLabel>
+                <FieldLabel>Poster Image</FieldLabel>
                 <FieldContent>
-                  <Input
+                  <input
+                    title="Upload poster"
                     ref={fileInputRef}
                     type="file"
                     accept="image/*"
-                    onChange={handleImageUpload}
                     className="hidden"
+                    onChange={handleFileSelect}
                   />
 
-                  {posterImage ? (
+                  {posterPreview ? (
                     <div className="relative w-full">
-                      <div className="relative overflow-hidden rounded-lg border-2 border-gray-200 bg-gray-50">
+                      <div className="relative overflow-hidden rounded-lg border-2 border-zinc-200 h-64">
                         <Image
-                          width={100}
-                          height={100}
-                          src={posterImage}
-                          alt="Movie poster preview"
-                          className="w-full h-64 object-cover"
+                          src={posterPreview}
+                          alt="Poster preview"
+                          fill
+                          className="object-cover"
+                          unoptimized
                         />
                         <button
-                          title="clear-image"
                           type="button"
-                          onClick={clearImage}
-                          className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                          title="Remove poster"
+                          onClick={clearPoster}
+                          className="absolute top-2 right-2 p-2 bg-zinc-900 text-white rounded-full hover:bg-zinc-700 transition-colors"
                         >
-                          <X size={18} />
+                          <X size={16} />
                         </button>
                       </div>
                       <Button
                         type="button"
+                        variant="outline"
                         onClick={() => fileInputRef.current?.click()}
-                        className="mt-2 w-full px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg transition-colors"
+                        className="mt-2 w-full"
                       >
                         Change Poster
                       </Button>
@@ -203,319 +271,302 @@ export default function MovieForm() {
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-full flex flex-col items-center justify-center px-6 py-8 border-2 border-dashed border-gray-300 rounded-lg hover:border-gray-400 hover:bg-gray-50 transition-colors cursor-pointer"
+                      className="w-full flex flex-col items-center justify-center px-6 py-10 border-2 border-dashed border-zinc-300 rounded-lg hover:border-zinc-500 hover:bg-zinc-50 transition-colors cursor-pointer"
                     >
-                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                      <span className="text-sm font-medium text-gray-700">
+                      <Upload className="w-8 h-8 text-zinc-400 mb-2" />
+                      <span className="text-sm font-medium text-zinc-600">
                         Click to upload poster
                       </span>
-                      <span className="text-xs text-gray-500 mt-1">
-                        PNG, JPG up to 10MB
+                      <span className="text-xs text-zinc-400 mt-1">
+                        PNG, JPG up to 10 MB
                       </span>
                     </button>
                   )}
+
+                  {/* Also allow pasting a direct URL */}
+                  <div className="mt-3 space-y-1">
+                    <p className="text-xs text-zinc-500">
+                      Or paste an image URL directly:
+                    </p>
+                    <Input
+                      {...register("movie_poster_url")}
+                      placeholder="https://example.com/poster.jpg"
+                      onChange={(e) => {
+                        register("movie_poster_url").onChange(e);
+                        const val = e.target.value;
+                        setPosterPreview(val.startsWith("http") ? val : "");
+                      }}
+                      value={posterUrlField ?? ""}
+                    />
+                  </div>
+
+                  {isEdit && !posterUrlField && (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-zinc-500">
+                      <ImageOff className="w-3.5 h-3.5" />
+                      Leave blank to keep the existing poster.
+                    </div>
+                  )}
                 </FieldContent>
-                <FieldError>{errors.moviePoster?.message}</FieldError>
+                <FieldError>
+                  {
+                    (errors as { movie_poster_url?: { message?: string } })
+                      .movie_poster_url?.message
+                  }
+                </FieldError>
               </Field>
 
               {/* Movie Name */}
               <Field>
-                <FieldLabel className="text-sm font-medium text-gray-700 mb-2">
-                  Movie Name
-                </FieldLabel>
+                <FieldLabel>Movie Name</FieldLabel>
                 <FieldContent>
                   <Input
-                    {...register("movieName")}
-                    placeholder="Enter movie name"
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    {...register("movie_name")}
+                    placeholder="e.g. Avengers: Endgame"
                   />
                 </FieldContent>
-                <FieldError className="text-sm text-red-600 mt-1">
-                  {errors.movieName?.message}
-                </FieldError>
+                <FieldError>{errors.movie_name?.message}</FieldError>
               </Field>
 
               {/* Director */}
               <Field>
-                <FieldLabel className="text-sm font-medium text-gray-700 mb-2">
-                  Director
-                </FieldLabel>
+                <FieldLabel>Director</FieldLabel>
                 <FieldContent>
                   <Input
                     {...register("director")}
-                    placeholder="Enter director name"
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:border-transparent"
+                    placeholder="e.g. Anthony Russo, Joe Russo"
                   />
                 </FieldContent>
-                <FieldError className="text-sm text-red-600 mt-1">
-                  {errors.director?.message}
-                </FieldError>
+                <FieldError>{errors.director?.message}</FieldError>
               </Field>
 
               {/* Genre */}
               <Field>
-                <FieldLabel className="text-sm font-medium text-gray-700 mb-2">
-                  Genre
-                </FieldLabel>
-
+                <FieldLabel>Genre</FieldLabel>
                 <Controller
                   control={control}
                   name="genre"
                   render={({ field }) => (
-                    <Select
-                      value={field.value || ""}
-                      onValueChange={field.onChange}
-                    >
-                      <SelectTrigger className="border border-gray-300 rounded-lg focus:ring-2">
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
                         <SelectValue placeholder="Select genre" />
                       </SelectTrigger>
-
                       <SelectContent>
-                        <SelectItem value="Action">Action</SelectItem>
-                        <SelectItem value="Drama">Drama</SelectItem>
-                        <SelectItem value="Sci-Fi">Sci-Fi</SelectItem>
-                        <SelectItem value="Comedy">Comedy</SelectItem>
-                        <SelectItem value="Horror">Horror</SelectItem>
-                        <SelectItem value="Romance">Romance</SelectItem>
-                        <SelectItem value="Thriller">Thriller</SelectItem>
+                        {MOVIE_GENRES.filter((g) => g !== "All").map((g) => (
+                          <SelectItem key={g} value={g}>
+                            {g}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   )}
                 />
-                <FieldError className="text-sm text-red-600 mt-1">
-                  {errors.genre?.message}
-                </FieldError>
+                <FieldError>{errors.genre?.message}</FieldError>
               </Field>
 
               {/* Description */}
               <Field>
-                <FieldLabel className="text-sm font-medium text-gray-700 mb-2">
-                  Description
-                </FieldLabel>
+                <FieldLabel>Description</FieldLabel>
                 <FieldContent>
                   <Textarea
                     {...register("description")}
-                    placeholder="Enter movie description"
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:border-transparent"
+                    placeholder="Write a short synopsis…"
                     rows={4}
                   />
                 </FieldContent>
-                <FieldError className="text-sm text-red-600 mt-1">
-                  {errors.description?.message}
-                </FieldError>
+                <FieldError>{errors.description?.message}</FieldError>
               </Field>
             </FieldGroup>
           </FieldSet>
         </CardContent>
       </Card>
 
-      {/* ================= SCHEDULE ================= */}
+      {/* ── CARD 2: Showtimes ── */}
+      <Card>
+        <CardContent className="p-6 space-y-5">
+          <div>
+            <h2 className="text-lg font-semibold">Showtimes</h2>
+            <p className="text-sm text-zinc-500 mt-0.5">
+              {isEdit
+                ? "Add new showtimes (id = 0) or update existing ones by entering their id."
+                : "Schedule one or more showtimes across different theaters."}
+            </p>
+          </div>
 
-      <Card className="border border-gray-200 shadow-sm">
-        <CardContent className="p-6">
-          <FieldSet>
-            <FieldTitle className="text-lg font-semibold text-gray-900 mb-6">
-              Schedule
-            </FieldTitle>
+          <Separator />
 
-            <FieldGroup className="space-y-6">
-              <Field>
-                <FieldLabel className="text-sm font-medium text-gray-700 mb-2">
-                  Show Date
-                </FieldLabel>
-                <FieldContent>
-                  <Input
-                    type="datetime-local"
-                    {...register("showDate")}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </FieldContent>
-                <FieldError className="text-sm text-red-600 mt-1">
-                  {errors.showDate?.message}
-                </FieldError>
-              </Field>
+          {/* Theater info cards */}
+          {theaters.length > 0 && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {theaters.map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-center justify-between px-4 py-3 rounded-lg border bg-zinc-50 text-sm"
+                >
+                  <span className="font-medium">{t.name}</span>
+                  <span className="text-zinc-500">
+                    {t.total_rows} rows × {t.total_columns} cols
+                    <span className="ml-1 font-medium text-zinc-700">
+                      ({t.total_rows * t.total_columns} seats)
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
 
-              {/* ShowTimes */}
-              <Field>
-                <FieldLabel className="text-sm font-medium text-gray-700 mb-2">
-                  Show Times
-                </FieldLabel>
-
-                <FieldContent className="space-y-3">
-                  {showTimes.fields.length === 0 ? (
-                    <p className="text-sm text-gray-500 py-2">
-                      No show times added yet
-                    </p>
-                  ) : (
-                    showTimes.fields.map((item, index) => (
-                      <div key={item.id} className="flex gap-2">
-                        <Input
-                          type="time"
-                          {...register(`showTimes.${index}`)}
-                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2  focus:border-transparent"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => showTimes.remove(index)}
-                          className="px-3 py-2 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition-colors"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))
-                  )}
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => showTimes.append("")}
-                    className="w-full text-gray-700 border-gray-300 hover:bg-gray-50"
-                  >
-                    + Add Show Time
-                  </Button>
-                </FieldContent>
-              </Field>
-            </FieldGroup>
-          </FieldSet>
-        </CardContent>
-      </Card>
-
-      {/* ================= CASTS ================= */}
-
-      <Card className="border border-gray-200 shadow-sm">
-        <CardContent className="p-6">
-          <FieldSet>
-            <FieldTitle className="text-lg font-semibold text-gray-900 mb-6">
-              Casts
-            </FieldTitle>
-
-            <FieldContent className="space-y-3">
-              {casts.fields.length === 0 ? (
-                <p className="text-sm text-gray-500 py-2">No casts added yet</p>
-              ) : (
-                casts.fields.map((item, index) => (
-                  <div key={item.id} className="flex gap-2">
-                    <Input
-                      placeholder="Actor name"
-                      {...register(`casts.${index}`)}
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => casts.remove(index)}
-                      className="px-3 py-2 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition-colors"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))
-              )}
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => casts.append("")}
-                className="w-full text-gray-700 border-gray-300 hover:bg-gray-50"
+          {/* Showtime rows */}
+          <div className="space-y-3">
+            {fields.map((field, index) => (
+              <div
+                key={field.id}
+                className="grid grid-cols-[auto_1fr_1fr_auto] gap-3 items-start p-4 rounded-lg border bg-white"
               >
-                + Add Cast
-              </Button>
-            </FieldContent>
-          </FieldSet>
-        </CardContent>
-      </Card>
+                {/* Showtime ID (visible in edit mode) */}
+                {isEdit && (
+                  <Field>
+                    <FieldLabel className="text-xs text-zinc-500 uppercase tracking-wider">
+                      ID
+                    </FieldLabel>
+                    <FieldContent>
+                      <Input
+                        type="number"
+                        className="w-20"
+                        placeholder="0"
+                        {...register(`showtimes.${index}.id`, {
+                          valueAsNumber: true,
+                        })}
+                      />
+                    </FieldContent>
+                  </Field>
+                )}
 
-      {/* ================= SLOT BUILDER ================= */}
+                {/* Theater selector */}
+                <Field>
+                  <FieldLabel className="text-xs text-zinc-500 uppercase tracking-wider">
+                    Theater
+                  </FieldLabel>
+                  <Controller
+                    control={control}
+                    name={`showtimes.${index}.theater_id`}
+                    render={({ field: f }) => (
+                      <Select
+                        value={f.value ? String(f.value) : ""}
+                        onValueChange={(v) => f.onChange(Number(v))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select hall…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {theaters.map((t) => (
+                            <SelectItem key={t.id} value={String(t.id)}>
+                              <span className="font-medium">{t.name}</span>
+                              <span className="ml-2 text-zinc-400 text-xs">
+                                {t.total_rows * t.total_columns} seats
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  <FieldError>
+                    {
+                      (
+                        errors.showtimes as
+                          | {
+                              [key: number]: {
+                                theater_id?: { message?: string };
+                              };
+                            }
+                          | undefined
+                      )?.[index]?.theater_id?.message
+                    }
+                  </FieldError>
+                </Field>
 
-      <Card className="border border-gray-200 shadow-sm">
-        <CardContent className="p-6 space-y-6">
-          <FieldTitle className="text-lg font-semibold text-gray-900">
-            Seat / Slot Builder
-          </FieldTitle>
+                {/* Date + time */}
+                <Field>
+                  <FieldLabel className="text-xs text-zinc-500 uppercase tracking-wider">
+                    Date &amp; Time
+                  </FieldLabel>
+                  <FieldContent>
+                    <Input
+                      type="datetime-local"
+                      {...register(`showtimes.${index}.show_datetime`)}
+                    />
+                  </FieldContent>
+                  <FieldError>
+                    {
+                      (
+                        errors.showtimes as
+                          | {
+                              [key: number]: {
+                                show_datetime?: { message?: string };
+                              };
+                            }
+                          | undefined
+                      )?.[index]?.show_datetime?.message
+                    }
+                  </FieldError>
+                </Field>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">
-                Number of Rows
-              </label>
-              <Input
-                type="number"
-                value={rows}
-                onChange={(e) => setRows(Number(e.target.value))}
-                min="1"
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">
-                Seats per Row
-              </label>
-              <Input
-                type="number"
-                value={cols}
-                onChange={(e) => setCols(Number(e.target.value))}
-                min="1"
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">
-                Seat Type
-              </label>
-              <Select value={slotType} onValueChange={setSlotType}>
-                <SelectTrigger className="border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                  <SelectValue placeholder="Select seat type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Normal Seat">Normal Seat</SelectItem>
-                  <SelectItem value="Premium Seat">Premium Seat</SelectItem>
-                  <SelectItem value="Couple Seat">Couple Seat</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">
-                Seat Price
-              </label>
-              <Input
-                value={slotPrice}
-                onChange={(e) => setSlotPrice(e.target.value)}
-                placeholder="e.g., 7000 MMK"
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
+                {/* Remove row */}
+                <div className="pt-6">
+                  <button
+                    type="button"
+                    disabled={fields.length === 1}
+                    onClick={() => remove(index)}
+                    title="Remove showtime"
+                    className="p-2 rounded-lg text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
 
-          <div className="flex gap-3">
-            <Button
-              type="button"
-              onClick={generateSlots}
-              className="flex-1 bg-black text-white hover:bg-gray-800 font-medium py-2 rounded-lg transition-colors"
-            >
-              Generate Slots ({rows} × {cols} = {rows * cols} seats)
-            </Button>
-          </div>
+          {/* Add row */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => append(blankShowtime())}
+            className="w-full gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Add Another Showtime
+          </Button>
 
-          {slots.fields.length > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800 font-medium">
-                ✓ {slots.fields.length} seats generated successfully
-              </p>
-            </div>
+          {showtimeErrors?.root?.message && (
+            <p className="text-sm text-red-500">
+              {showtimeErrors.root.message}
+            </p>
+          )}
+          {typeof showtimeErrors?.message === "string" && (
+            <p className="text-sm text-red-500">{showtimeErrors.message}</p>
           )}
         </CardContent>
       </Card>
 
-      {/* ================= SUBMIT ================= */}
-
-      <div className="flex gap-3 pt-4">
+      {/* Actions */}
+      <div className="flex gap-3 pb-8">
         <Button
-          type="submit"
-          className="flex-1 bg-black text-white hover:bg-gray-800 font-medium py-3 rounded-lg transition-colors"
+          type="button"
+          variant="outline"
+          onClick={() => navigate.back()}
+          className="flex-1"
+          disabled={isSubmitting}
         >
-          Create Movie
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isSubmitting} className="flex-1">
+          {isSubmitting
+            ? isEdit
+              ? "Saving…"
+              : "Creating…"
+            : isEdit
+            ? "Save Changes"
+            : "Create Movie & Showtimes"}
         </Button>
       </div>
     </form>

@@ -1,0 +1,47 @@
+---
+alwaysApply: true
+---
+
+# Component Structure Rules
+
+## Current folder layout to follow
+
+app/
+admin/
+_components/ ← admin-only route components (Next.js convention, prefixed with _)
+dashboard/
+movies/
+users/
+auth/
+client/
+movies/
+profile/
+
+components/
+auth/ ← auth forms, login card, register form
+dashboard/ ← dashboard widgets, stat cards, tables
+providers/ ← context providers, theme provider, auth provider
+shared/ ← components used across both admin and client routes
+ui/ ← truly generic: Button, Input, Modal, Badge, Spinner, etc.
+
+## Rules for where a component goes
+
+1. Used ONLY in admin routes → `app/admin/_components/` or a subfolder's own component file
+2. Used ONLY in one specific route (e.g. only in client/movies) → co-locate inside that route folder
+3. Used in 2+ admin routes → `components/dashboard/`
+4. Used in both admin AND client → `components/shared/`
+5. Generic with no business logic (Button, Input, Card, Badge) → `components/ui/`
+6. Auth-related (LoginForm, RegisterForm) → `components/auth/`
+7. React context providers → `components/providers/`
+
+## Component file rules
+
+- Each file exports exactly one component as its default export
+- Never define a secondary component inside a file if it exceeds 30 lines — extract it
+- Co-locate the component's TypeScript types in the same file unless used across 3+ files
+- If types are shared, move them to a `types.ts` file in the same folder
+
+## Naming
+
+- Component files: PascalCase → `MovieCard.tsx`, `SeatGrid.tsx`
+- Folders: lowercase kebab → `movie-card/` only if the component needs co-located styles/tests

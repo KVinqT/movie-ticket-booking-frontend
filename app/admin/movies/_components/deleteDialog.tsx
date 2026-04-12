@@ -12,35 +12,26 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Trash2 } from "lucide-react";
+import { useDeleteMovie } from "@/lib/api/admin/movies";
 
 type Props = {
-  id: string;
+  id: number;
   entityName: string;
   confirmContext: string;
 };
 
 export function DeleteDialog({ id, entityName, confirmContext }: Props) {
-  const handleDelete = async () => {
-    try {
-      //   await fetch(`/api/movies/${movieId}`, {
-      //     method: "DELETE",
-      //   });
-      //   router.refresh(); // ✅ refresh table (App Router way)
-    } catch (error) {
-      console.error("Delete failed", error);
-    }
-  };
+  const { mutate: deleteMovie, isPending } = useDeleteMovie();
 
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Trash2 className="w-5 h-5 cursor-pointer" color="red" />
+        <Trash2 className="w-5 h-5 cursor-pointer text-zinc-400 hover:text-zinc-900 transition-colors" />
       </AlertDialogTrigger>
 
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{confirmContext}?</AlertDialogTitle>
-
           <AlertDialogDescription>
             Are you sure you want to delete{" "}
             <span className="font-semibold">{entityName}</span>? This action
@@ -49,13 +40,12 @@ export function DeleteDialog({ id, entityName, confirmContext }: Props) {
         </AlertDialogHeader>
 
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-
+          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
           <AlertDialogAction
-            onClick={handleDelete}
-            className="bg-red-600 hover:bg-red-700"
+            disabled={isPending}
+            onClick={() => deleteMovie(id)}
           >
-            Delete
+            {isPending ? "Deleting…" : "Delete"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

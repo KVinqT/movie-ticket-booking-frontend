@@ -1,32 +1,35 @@
 "use client";
 
 import { Undo2 } from "lucide-react";
-import React from "react";
-import MovieForm from "../_components/MovieForm";
 import { useRouter } from "next/navigation";
+import MovieForm from "../_components/MovieForm";
 
-const CreateMovie = () => {
+export default function CreateMoviePage() {
   const navigate = useRouter();
-  return (
-    <div className="min-h-screen p-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex items-center gap-3 mb-8">
-          <Undo2 className="w-6 h-6" onClick={() => navigate.back()} />
-        </div>
 
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
+  return (
+    <div className="min-h-screen py-2">
+      <div className="max-w-3xl mx-auto px-6">
+        <button
+          onClick={() => navigate.back()}
+          className="flex items-center gap-2 text-zinc-500 hover:text-zinc-900 transition-colors"
+        >
+          <Undo2 className="w-5 h-5" />
+          <span className="text-sm">Back to Movies</span>
+        </button>
+
+        <div className="mt-6 space-y-1">
+          <h1 className="text-4xl font-bold tracking-tight">
             Create New Movie
           </h1>
-          <p className="text-lg text-gray-600">
-            Add a new movie and configure its show times and seat availability
+          <p className="text-zinc-500 text-sm">
+            Fill in the movie details and schedule one or more showtimes.
+            Showtimes are grouped by theater and submitted together.
           </p>
         </div>
 
-        <MovieForm />
+        <MovieForm mode="create" />
       </div>
     </div>
   );
-};
-
-export default CreateMovie;
+}

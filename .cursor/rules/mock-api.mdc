@@ -1,0 +1,69 @@
+---
+alwaysApply: true
+---
+
+# Mock API Rules
+
+All data fetching is abstracted through `lib/api/` even while using mocks.
+When the real API is ready, only the files inside `lib/api/mock/` need to change.
+All API types are defined in `lib/api/types.ts`.
+Always import from there — never redefine types inline in components.
+
+## Required folder structure
+
+lib/
+api/
+mock/
+movies.ts ← mock data arrays, typed to match DB schema
+showtimes.ts
+theaters.ts
+bookings.ts
+users.ts
+movies.ts ← exported async functions, currently calls mock data
+showtimes.ts
+theaters.ts
+bookings.ts
+users.ts
+types.ts ← all API response types matching the DB schema exactly
+
+## Mock data field names must match the DB schema
+
+Use these exact field names (from the agreed schema):
+
+- Movies: id, movie_name, director, movie_poster_url, genre, description, created_by, created_at
+- Showtimes: id, movie_id, theater_id, show_datetime, status, created_at
+- Theaters: id, name, total_rows, total_columns
+- TheaterSeats: id, theater_id, row_label, column_number, seat_name, seat_type, base_price, is_active
+- Bookings: id, user_id, showtime_id, booking_ref, total_amount, status, booked_at
+- BookingSeats: id, booking_id, seat_id, price_at_booking
+
+## API function pattern — every function must follow this signature
+
+// List with pagination
+getMovies(params?: MovieQueryParams): Promise<PaginatedResponse<Movie>>
+
+// Single item
+getMovieById(id: number): Promise<Movie>
+
+// Related resources
+getShowtimesByMovie(movieId: number): Promise<Showtime[]>
+getSeatsByShowtime(showtimeId: number): Promise<SeatAvailability[]>
+
+// Mutations
+createBooking(payload: CreateBookingPayload): Promise<Booking>
+cancelBooking(bookingId: number): Promise<Booking>
+
+## Simulating async behavior in mocks
+
+Every mock function must use an artificial delay:
+await new Promise(resolve => setTimeout(resolve, 300));
+This ensures components handle loading states correctly before the real API lands.
+
+## PaginatedResponse shape
+
+interface PaginatedResponse<T> {
+data: T[];
+total: number;
+page: number;
+per_page: number;
+}
