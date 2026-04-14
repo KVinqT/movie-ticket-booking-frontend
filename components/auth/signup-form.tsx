@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import { Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +20,38 @@ import { type SignupFormValues, signupSchema } from "@/lib/validation";
 type SignupFormProps = {
   onSubmit: (values: SignupFormValues) => void | Promise<void>;
 };
+
+function PasswordInput({
+  id,
+  autoComplete,
+  registration,
+}: {
+  id: string;
+  autoComplete: string;
+  registration: ReturnType<ReturnType<typeof useForm>["register"]>;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <Input
+        id={id}
+        type={show ? "text" : "password"}
+        autoComplete={autoComplete}
+        className="pr-10"
+        {...registration}
+      />
+      <button
+        type="button"
+        onClick={() => setShow((v) => !v)}
+        className="absolute inset-y-0 right-3 flex items-center text-zinc-400 hover:text-zinc-600 transition-colors"
+        tabIndex={-1}
+        aria-label={show ? "Hide password" : "Show password"}
+      >
+        {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+      </button>
+    </div>
+  );
+}
 
 export function SignupForm({ onSubmit }: SignupFormProps) {
   const form = useForm<SignupFormValues>({
@@ -64,11 +98,10 @@ export function SignupForm({ onSubmit }: SignupFormProps) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="signup-password">Password</Label>
-            <Input
+            <PasswordInput
               id="signup-password"
-              type="password"
               autoComplete="new-password"
-              {...form.register("password")}
+              registration={form.register("password")}
             />
             <p className="text-xs text-red-400">
               {form.formState.errors.password?.message}
@@ -76,11 +109,10 @@ export function SignupForm({ onSubmit }: SignupFormProps) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirm-password">Confirm Password</Label>
-            <Input
+            <PasswordInput
               id="confirm-password"
-              type="password"
               autoComplete="new-password"
-              {...form.register("confirmPassword")}
+              registration={form.register("confirmPassword")}
             />
             <p className="text-xs text-red-400">
               {form.formState.errors.confirmPassword?.message}
