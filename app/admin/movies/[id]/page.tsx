@@ -21,18 +21,21 @@ export default function AdminMovieDetail({ params }: Props) {
   const movieId = Number(id);
 
   const { data: movie, isLoading, isError } = useMovie(movieId);
-  const [selectedShowtime, setSelectedShowtime] = useState<ServerShowtime | null>(null);
+  const [selectedShowtime, setSelectedShowtime] =
+    useState<ServerShowtime | null>(null);
 
   // Auto-select first showtime once data arrives
-  const activeShowtime =
-    selectedShowtime ?? (movie?.showtimes?.[0] ?? null);
+  const activeShowtime = selectedShowtime ?? movie?.showtimes?.[0] ?? null;
 
   if (isLoading) {
     return <div className="py-20 text-center text-zinc-400">Loading…</div>;
   }
   if (isError || !movie) {
-    return <div className="py-20 text-center text-red-400">Movie not found.</div>;
+    return (
+      <div className="py-20 text-center text-red-400">Movie not found.</div>
+    );
   }
+  console.log("Active showtime", activeShowtime);
 
   // Stats computed from the selected showtime
   const theater = activeShowtime?.theater;
@@ -107,7 +110,9 @@ export default function AdminMovieDetail({ params }: Props) {
                     : "border-zinc-200 bg-white hover:border-zinc-400",
                 ].join(" ")}
               >
-                <span className="block">{formatShowtime(st.show_datetime)}</span>
+                <span className="block">
+                  {formatShowtime(st.show_datetime)}
+                </span>
                 <span className="block text-xs opacity-60 mt-0.5">
                   {st.theater.name}
                 </span>

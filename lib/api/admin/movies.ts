@@ -35,7 +35,7 @@ async function createMovie(payload: CreateMoviePayload): Promise<Movie> {
 }
 
 async function updateMovie(id: number, payload: EditMoviePayload): Promise<Movie> {
-  const { data } = await http.patch<Movie>(`/movies/${id}`, payload);
+  const { data } = await http.put<Movie>(`/movies/${id}`, payload);
   return data;
 }
 

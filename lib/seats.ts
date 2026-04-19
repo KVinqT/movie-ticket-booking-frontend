@@ -21,10 +21,13 @@ export function groupSeatsByRow(
 
 /**
  * Returns true when a seat can be selected.
- * @param seat - SeatAvailability from the API
+ * Availability is determined by the server-computed `is_booked` flag,
+ * which is reflected in `status`. The `is_active` field is not used here
+ * because the server sets it to 0 when a seat is booked, making it
+ * unreliable as a standalone availability signal.
  */
 export function isSeatAvailable(seat: SeatAvailability): boolean {
-  return seat.status === "available" && seat.is_active;
+  return seat.status === "available";
 }
 
 /**

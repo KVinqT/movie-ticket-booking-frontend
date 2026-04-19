@@ -51,14 +51,43 @@ export const createMovieFormSchema = movieSchema.extend({
 });
 
 /**
- * Edit movie form — poster is optional so the admin can leave it unchanged.
- * Showtimes represent new or updated slots (id = 0 = new).
+ * Relaxed showtime row for edit mode.
+ * - Completely blank rows are valid (they will be ignored on submit).
+ * - Partially filled rows (only theater OR only datetime) are rejected.
  */
-export const editMovieFormSchema = movieSchema
-  .extend({
-    movie_poster_url: z.string().optional(),
-    showtimes: z.array(showtimeEntrySchema),
+export const editShowtimeEntrySchema = z
+  .object({
+    id: z.number().default(0),
+    theater_id: z.number().default(0),
+    show_datetime: z.string().default(""),
+  })
+  .superRefine((val, ctx) => {
+    const hasTheater = val.theater_id > 0;
+    const hasDatetime = val.show_datetime.trim() !== "";
+    if (hasTheater && !hasDatetime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Pick a date and time",
+        path: ["show_datetime"],
+      });
+    }
+    if (!hasTheater && hasDatetime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Select a theater",
+        path: ["theater_id"],
+      });
+    }
   });
+
+/**
+ * Edit movie form — poster is optional so the admin can leave it unchanged.
+ * Showtimes are optional: blank rows are ignored, partially filled rows error.
+ */
+export const editMovieFormSchema = movieSchema.extend({
+  movie_poster_url: z.string().optional(),
+  showtimes: z.array(editShowtimeEntrySchema),
+});
 
 export const editProfileSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
@@ -69,6 +98,7 @@ export type LoginFormValues = z.infer<typeof loginSchema>;
 export type SignupFormValues = z.infer<typeof signupSchema>;
 export type MovieFormValues = z.infer<typeof movieSchema>;
 export type ShowtimeEntryValues = z.infer<typeof showtimeEntrySchema>;
+export type EditShowtimeEntryValues = z.infer<typeof editShowtimeEntrySchema>;
 export type CreateMovieFormValues = z.infer<typeof createMovieFormSchema>;
 export type EditMovieFormValues = z.infer<typeof editMovieFormSchema>;
 export type EditProfileFormValues = z.infer<typeof editProfileSchema>;

@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { Undo2, User2, Mail, CalendarDays, Ticket } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { MoviePoster } from "@/components/shared/MoviePoster";
 import EditProfileDialog from "@/components/shared/EditProfileDialog";
@@ -10,24 +9,17 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { useUserProfile } from "@/lib/api/client/users";
 import { formatShowtime, formatDate } from "@/lib/date";
 import { formatPrice } from "@/lib/currency";
-import { getBookingStatusLabel } from "@/lib/booking";
-import type { BookingStatus } from "@/lib/api/types";
-
-function statusVariant(status: BookingStatus) {
-  switch (status) {
-    case "confirmed": return "default";
-    case "pending":   return "secondary";
-    default:          return "outline";
-  }
-}
+import { Badge } from "@/components/ui/badge";
 
 export default function ProfilePage() {
   const { currentUser } = useAuth();
   const navigate = useRouter();
 
-  const { data: profile, isLoading, isError } = useUserProfile(
-    currentUser?.id ?? 0,
-  );
+  const {
+    data: profile,
+    isLoading,
+    isError,
+  } = useUserProfile(currentUser?.id ?? 0);
 
   if (!currentUser) return null;
 
@@ -76,7 +68,7 @@ export default function ProfilePage() {
           <h2 className="text-xl font-semibold">Your Bookings</h2>
           {profile && (
             <span className="text-xs text-zinc-400 ml-1">
-              ({profile.bookings.length})
+              ({profile.bookings.filter((b) => !!b.showtime?.movie).length})
             </span>
           )}
         </div>
@@ -87,56 +79,64 @@ export default function ProfilePage() {
           <div className="py-10 text-center text-red-400">
             Failed to load bookings.
           </div>
-        ) : !profile || profile.bookings.length === 0 ? (
-          <p className="text-zinc-400 text-sm">No bookings yet.</p>
-        ) : (
+        ) : (() => {
+          // Only keep bookings that have valid movie data
+          const validBookings = profile?.bookings.filter(
+            (b) => !!b.showtime?.movie,
+          ) ?? [];
+
+          if (validBookings.length === 0) {
+            return <p className="text-zinc-400 text-sm">No bookings yet.</p>;
+          }
+
+          return (
           <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {profile.bookings.map((booking) => {
-              const { movie, theater } = booking.showtime;
-              const seatNames = booking.seats.map((bs) => bs.seat.seat_name);
+            {validBookings.map((booking) => {
+              const movie = booking.showtime!.movie!;
+              const theater = booking.showtime?.theater ?? null;
+              const showDatetime = booking.showtime?.show_datetime ?? null;
+              const seatNames = booking.seats
+                .map((bs) => bs.seat?.seat_name)
+                .filter((n): n is string => Boolean(n));
 
               return (
                 <div
                   key={booking.id}
-                  className="group border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition"
+                  className="group border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition bg-white"
                 >
                   {/* Poster */}
-                  <div className="relative w-full h-52 bg-zinc-900 overflow-hidden">
+                  <div className="relative w-full h-44 bg-zinc-900 overflow-hidden">
                     <MoviePoster
                       src={movie.movie_poster_url}
                       alt={movie.movie_name}
                       containerClassName="absolute inset-0 w-full h-full rounded-none border-none"
                     />
                     <div className="absolute inset-0 bg-black/40" />
-                    <div className="absolute top-3 right-3">
-                      <Badge
-                        variant={statusVariant(booking.status)}
-                        className="text-[10px]"
-                      >
-                        {getBookingStatusLabel(booking.status)}
-                      </Badge>
-                    </div>
                   </div>
 
                   {/* Info */}
                   <div className="p-4 space-y-3">
                     <h3 className="font-semibold text-base leading-tight">
-                      {movie.movie_name}
+                      {movie?.movie_name ?? "Unknown Movie"}
                     </h3>
 
                     <div className="text-xs text-zinc-500 space-y-1">
-                      <p>
-                        Showtime:{" "}
-                        <span className="font-medium text-zinc-700">
-                          {formatShowtime(booking.showtime.show_datetime)}
-                        </span>
-                      </p>
-                      <p>
-                        Theater:{" "}
-                        <span className="font-medium text-zinc-700">
-                          {theater.name}
-                        </span>
-                      </p>
+                      {showDatetime && (
+                        <p>
+                          Showtime:{" "}
+                          <span className="font-medium text-zinc-700">
+                            {formatShowtime(showDatetime)}
+                          </span>
+                        </p>
+                      )}
+                      {theater && (
+                        <p>
+                          Theater:{" "}
+                          <span className="font-medium text-zinc-700">
+                            {theater.name}
+                          </span>
+                        </p>
+                      )}
                       <p>
                         Ref:{" "}
                         <span className="font-mono font-medium text-zinc-700">
@@ -146,16 +146,18 @@ export default function ProfilePage() {
                     </div>
 
                     {/* Seats */}
-                    <div className="flex flex-wrap gap-1 pt-2 border-t">
-                      {seatNames.map((name) => (
-                        <span
-                          key={name}
-                          className="px-2 py-0.5 text-xs rounded bg-zinc-100 font-mono border border-zinc-200"
-                        >
-                          {name}
-                        </span>
-                      ))}
-                    </div>
+                    {seatNames.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-2 border-t">
+                        {seatNames.map((name) => (
+                          <span
+                            key={name}
+                            className="px-2 py-0.5 text-xs rounded bg-zinc-100 font-mono border border-zinc-200"
+                          >
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Total */}
                     <div className="flex justify-between items-center pt-2 border-t">
@@ -169,7 +171,8 @@ export default function ProfilePage() {
               );
             })}
           </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

@@ -48,12 +48,16 @@ import {
   useCreateUpdateShowtimes,
   toServerDatetime,
 } from "@/lib/api/admin/showtimes";
-import type { AdminMovie } from "@/lib/api/types";
+import type { ServerMovieDetail } from "@/lib/api/types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type CreateMode = { mode: "create" };
-type EditMode = { mode: "edit"; movieId: number; initialData: AdminMovie };
+type EditMode = {
+  mode: "edit";
+  movieId: number;
+  initialData: ServerMovieDetail;
+};
 type MovieFormProps = CreateMode | EditMode;
 
 type FormValues = CreateMovieFormValues | EditMovieFormValues;
@@ -68,6 +72,14 @@ function blankShowtime() {
   return { id: 0, theater_id: 0, show_datetime: "" };
 }
 
+/**
+ * Converts a server datetime string "2026-04-13 16:18:00"
+ * to the value expected by a datetime-local input "2026-04-13T16:18".
+ */
+function toDatetimeLocal(serverDatetime: string): string {
+  return serverDatetime.replace(" ", "T").slice(0, 16);
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function MovieForm(props: MovieFormProps) {
@@ -76,21 +88,30 @@ export default function MovieForm(props: MovieFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [posterPreview, setPosterPreview] = useState<string>(
-    isEdit ? (props as EditMode).initialData.movie_poster_url : ""
+    isEdit ? (props as EditMode).initialData.movie_poster_url : "",
   );
 
   // Use the correct schema for each mode
   const schema = isEdit ? editMovieFormSchema : createMovieFormSchema;
 
   const defaultValues: FormValues = isEdit
-    ? {
-        movie_name: (props as EditMode).initialData.movie_name,
-        director: (props as EditMode).initialData.director,
-        movie_poster_url: (props as EditMode).initialData.movie_poster_url,
-        genre: (props as EditMode).initialData.genre,
-        description: (props as EditMode).initialData.description,
-        showtimes: [blankShowtime()],
-      }
+    ? (() => {
+        const d = (props as EditMode).initialData;
+        // Pre-fill existing showtimes, then append one blank row for new entries
+        const existingRows = d.showtimes.map((st) => ({
+          id: st.id,
+          theater_id: st.theater_id,
+          show_datetime: toDatetimeLocal(st.show_datetime),
+        }));
+        return {
+          movie_name: d.movie_name,
+          director: d.director,
+          movie_poster_url: d.movie_poster_url,
+          genre: d.genre,
+          description: d.description,
+          showtimes: [...existingRows, blankShowtime()],
+        };
+      })()
     : {
         movie_name: "",
         director: "",
@@ -125,7 +146,7 @@ export default function MovieForm(props: MovieFormProps) {
   // Mutations
   const { mutateAsync: createMovie } = useCreateMovie();
   const { mutateAsync: updateMovie } = useUpdateMovie(
-    isEdit ? (props as EditMode).movieId : 0
+    isEdit ? (props as EditMode).movieId : 0,
   );
   const { mutateAsync: createUpdateShowtimes } = useCreateUpdateShowtimes();
 
@@ -151,21 +172,87 @@ export default function MovieForm(props: MovieFormProps) {
 
   const onSubmit = async (data: FormValues) => {
     try {
-      let movieId: number;
-
       if (isEdit) {
-        const updated = await updateMovie({
-          movie_name: data.movie_name,
-          director: data.director,
-          genre: data.genre,
-          description: data.description,
-          ...(data.movie_poster_url
-            ? { movie_poster_url: data.movie_poster_url }
-            : {}),
-        });
-        movieId = updated.id;
-        toast.success("Movie updated successfully!");
+        const initial = (props as EditMode).initialData;
+        const editedMovieId = (props as EditMode).movieId;
+
+        // ── 1. Movie field change detection ───────────────────────────────────
+        const posterChanged =
+          !!data.movie_poster_url &&
+          data.movie_poster_url !== initial.movie_poster_url;
+
+        const movieChanged =
+          data.movie_name !== initial.movie_name ||
+          data.director !== initial.director ||
+          data.genre !== initial.genre ||
+          data.description !== initial.description ||
+          posterChanged;
+
+        if (movieChanged) {
+          await updateMovie({
+            movie_name: data.movie_name,
+            director: data.director,
+            genre: data.genre,
+            description: data.description,
+            ...(posterChanged ? { movie_poster_url: data.movie_poster_url } : {}),
+          });
+          toast.success("Movie details updated!");
+        }
+
+        // ── 2. Build showtime payload ─────────────────────────────────────────
+        //
+        // Always send all existing showtimes back — the server replaces the set.
+        //
+        // Condition 1 (no new rows): send existing rows as-is.
+        // Condition 2 (new rows added): merge existing + new (id = 0) rows.
+
+        const existingRows = data.showtimes.filter((st) => (st.id ?? 0) > 0);
+        const newRows = data.showtimes.filter(
+          (st) =>
+            (st.id ?? 0) === 0 &&
+            st.theater_id > 0 &&
+            st.show_datetime.trim() !== "",
+        );
+        const allRows = [...existingRows, ...newRows];
+
+        if (allRows.length > 0) {
+          // Group by theater_id — one API call per theater
+          const grouped = allRows.reduce<
+            Record<number, { id: number; show_datetime: string }[]>
+          >((acc, st) => {
+            acc[st.theater_id] ??= [];
+            acc[st.theater_id].push({
+              id: st.id ?? 0,
+              show_datetime: toServerDatetime(st.show_datetime),
+            });
+            return acc;
+          }, {});
+
+          await Promise.all(
+            Object.entries(grouped).map(([theaterId, showtimes]) =>
+              createUpdateShowtimes({
+                movie_id: editedMovieId,
+                theater_id: Number(theaterId),
+                showtimes,
+              }),
+            ),
+          );
+
+          if (newRows.length > 0) {
+            toast.success(`${newRows.length} new showtime(s) added!`);
+          }
+        }
+
+        if (!movieChanged && newRows.length === 0) {
+          toast.info("No changes detected.", {
+            description: "Edit movie details or add new showtimes to save.",
+          });
+          return;
+        }
+
+        navigate.push("/admin/movies");
       } else {
+        // ── CREATE mode ───────────────────────────────────────────────────────
         const created = await createMovie({
           movie_name: data.movie_name,
           director: data.director,
@@ -173,38 +260,34 @@ export default function MovieForm(props: MovieFormProps) {
           genre: data.genre,
           description: data.description,
         });
-        movieId = created.id;
+
+        // Group showtimes by theater_id — one API call per theater
+        const grouped = data.showtimes.reduce<
+          Record<number, { id: number; show_datetime: string }[]>
+        >((acc, st) => {
+          if (!st.theater_id) return acc;
+          acc[st.theater_id] ??= [];
+          acc[st.theater_id].push({
+            id: 0, // always new in create mode
+            show_datetime: toServerDatetime(st.show_datetime),
+          });
+          return acc;
+        }, {});
+
+        await Promise.all(
+          Object.entries(grouped).map(([theaterId, showtimes]) =>
+            createUpdateShowtimes({
+              movie_id: created.id,
+              theater_id: Number(theaterId),
+              showtimes,
+            }),
+          ),
+        );
+
+        toast.success("Movie & showtimes created successfully!");
+        navigate.push("/admin/movies");
       }
-
-      // Group showtimes by theater_id — one API call per theater
-      const grouped = data.showtimes.reduce<
-        Record<number, { id: number; show_datetime: string }[]>
-      >((acc, st) => {
-        if (!st.theater_id) return acc; // skip unselected rows
-        acc[st.theater_id] ??= [];
-        acc[st.theater_id].push({
-          id: st.id ?? 0,
-          show_datetime: toServerDatetime(st.show_datetime),
-        });
-        return acc;
-      }, {});
-
-      await Promise.all(
-        Object.entries(grouped).map(([theaterId, showtimes]) =>
-          createUpdateShowtimes({
-            movie_id: movieId,
-            theater_id: Number(theaterId),
-            showtimes,
-          })
-        )
-      );
-
-      if (!isEdit) toast.success("Movie & showtimes created successfully!");
-
-      navigate.push("/admin/movies");
     } catch {
-      // Individual mutation errors are already toasted by the hooks
-      // Only catch unexpected failures here
       toast.error("Something went wrong. Please try again.");
     }
   };
@@ -387,7 +470,7 @@ export default function MovieForm(props: MovieFormProps) {
             <h2 className="text-lg font-semibold">Showtimes</h2>
             <p className="text-sm text-zinc-500 mt-0.5">
               {isEdit
-                ? "Add new showtimes (id = 0) or update existing ones by entering their id."
+                ? "Edit the date/time for existing showtimes or add new ones below."
                 : "Schedule one or more showtimes across different theaters."}
             </p>
           </div>
@@ -416,114 +499,150 @@ export default function MovieForm(props: MovieFormProps) {
 
           {/* Showtime rows */}
           <div className="space-y-3">
-            {fields.map((field, index) => (
-              <div
-                key={field.id}
-                className="grid grid-cols-[auto_1fr_1fr_auto] gap-3 items-start p-4 rounded-lg border bg-white"
-              >
-                {/* Showtime ID (visible in edit mode) */}
-                {isEdit && (
+            {fields.map((field, index) => {
+              // `field.id` is RHF's internal key — use watch() to read our actual showtime id
+              const watchedId = watch(`showtimes.${index}.id`);
+              const isExistingRow = Number(watchedId) > 0;
+
+              const theaterForRow = isExistingRow
+                ? theaters.find(
+                    (t) => t.id === watch(`showtimes.${index}.theater_id`),
+                  )
+                : null;
+
+              return (
+                <div
+                  key={field.id}
+                  className={`grid gap-3 items-start p-4 rounded-lg border ${
+                    isExistingRow
+                      ? "bg-zinc-50 border-zinc-200 grid-cols-[1fr_1fr_auto]"
+                      : "bg-white grid-cols-[1fr_1fr_auto]"
+                  }`}
+                >
+                  {/* Theater — locked for existing rows, dropdown for new */}
                   <Field>
                     <FieldLabel className="text-xs text-zinc-500 uppercase tracking-wider">
-                      ID
+                      Theater
+                    </FieldLabel>
+                    {isExistingRow ? (
+                      <>
+                        {/* Hidden inputs preserve both theater_id and showtime id */}
+                        <input
+                          type="hidden"
+                          {...register(`showtimes.${index}.theater_id`, {
+                            valueAsNumber: true,
+                          })}
+                        />
+                        <input
+                          type="hidden"
+                          {...register(`showtimes.${index}.id`, {
+                            valueAsNumber: true,
+                          })}
+                        />
+                        <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-zinc-200 bg-zinc-100 text-sm text-zinc-600">
+                          {theaterForRow?.name ?? "—"}
+                          <span className="ml-auto text-xs text-zinc-400">
+                            Showtime #{watchedId}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* Hidden id field = 0 for new rows */}
+                        <input
+                          type="hidden"
+                          {...register(`showtimes.${index}.id`, {
+                            valueAsNumber: true,
+                          })}
+                        />
+                        <Controller
+                          control={control}
+                          name={`showtimes.${index}.theater_id`}
+                          render={({ field: f }) => (
+                            <Select
+                              value={f.value ? String(f.value) : ""}
+                              onValueChange={(v) => f.onChange(Number(v))}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select hall…" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {theaters.map((t) => (
+                                  <SelectItem key={t.id} value={String(t.id)}>
+                                    <span className="font-medium">
+                                      {t.name}
+                                    </span>
+                                    <span className="ml-2 text-zinc-400 text-xs">
+                                      {t.total_rows * t.total_columns} seats
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
+                      </>
+                    )}
+                    <FieldError>
+                      {
+                        (
+                          errors.showtimes as
+                            | {
+                                [key: number]: {
+                                  theater_id?: { message?: string };
+                                };
+                              }
+                            | undefined
+                        )?.[index]?.theater_id?.message
+                      }
+                    </FieldError>
+                  </Field>
+
+                  {/* Date + time */}
+                  <Field>
+                    <FieldLabel className="text-xs text-zinc-500 uppercase tracking-wider">
+                      Date &amp; Time
                     </FieldLabel>
                     <FieldContent>
                       <Input
-                        type="number"
-                        className="w-20"
-                        placeholder="0"
-                        {...register(`showtimes.${index}.id`, {
-                          valueAsNumber: true,
-                        })}
+                        type="datetime-local"
+                        {...register(`showtimes.${index}.show_datetime`)}
                       />
                     </FieldContent>
+                    <FieldError>
+                      {
+                        (
+                          errors.showtimes as
+                            | {
+                                [key: number]: {
+                                  show_datetime?: { message?: string };
+                                };
+                              }
+                            | undefined
+                        )?.[index]?.show_datetime?.message
+                      }
+                    </FieldError>
                   </Field>
-                )}
 
-                {/* Theater selector */}
-                <Field>
-                  <FieldLabel className="text-xs text-zinc-500 uppercase tracking-wider">
-                    Theater
-                  </FieldLabel>
-                  <Controller
-                    control={control}
-                    name={`showtimes.${index}.theater_id`}
-                    render={({ field: f }) => (
-                      <Select
-                        value={f.value ? String(f.value) : ""}
-                        onValueChange={(v) => f.onChange(Number(v))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select hall…" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {theaters.map((t) => (
-                            <SelectItem key={t.id} value={String(t.id)}>
-                              <span className="font-medium">{t.name}</span>
-                              <span className="ml-2 text-zinc-400 text-xs">
-                                {t.total_rows * t.total_columns} seats
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                  <FieldError>
-                    {
-                      (
-                        errors.showtimes as
-                          | {
-                              [key: number]: {
-                                theater_id?: { message?: string };
-                              };
-                            }
-                          | undefined
-                      )?.[index]?.theater_id?.message
-                    }
-                  </FieldError>
-                </Field>
-
-                {/* Date + time */}
-                <Field>
-                  <FieldLabel className="text-xs text-zinc-500 uppercase tracking-wider">
-                    Date &amp; Time
-                  </FieldLabel>
-                  <FieldContent>
-                    <Input
-                      type="datetime-local"
-                      {...register(`showtimes.${index}.show_datetime`)}
-                    />
-                  </FieldContent>
-                  <FieldError>
-                    {
-                      (
-                        errors.showtimes as
-                          | {
-                              [key: number]: {
-                                show_datetime?: { message?: string };
-                              };
-                            }
-                          | undefined
-                      )?.[index]?.show_datetime?.message
-                    }
-                  </FieldError>
-                </Field>
-
-                {/* Remove row */}
-                <div className="pt-6">
-                  <button
-                    type="button"
-                    disabled={fields.length === 1}
-                    onClick={() => remove(index)}
-                    title="Remove showtime"
-                    className="p-2 rounded-lg text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {/* Remove — disabled for existing showtimes */}
+                  <div className="pt-6">
+                    <button
+                      type="button"
+                      disabled={isExistingRow || fields.length === 1}
+                      onClick={() => remove(index)}
+                      title={
+                        isExistingRow
+                          ? "Existing showtimes cannot be removed here"
+                          : "Remove showtime"
+                      }
+                      className="p-2 rounded-lg text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Add row */}
@@ -534,7 +653,7 @@ export default function MovieForm(props: MovieFormProps) {
             className="w-full gap-2"
           >
             <Plus className="w-4 h-4" />
-            Add Another Showtime
+            Add New Showtime
           </Button>
 
           {showtimeErrors?.root?.message && (
@@ -565,8 +684,8 @@ export default function MovieForm(props: MovieFormProps) {
               ? "Saving…"
               : "Creating…"
             : isEdit
-            ? "Save Changes"
-            : "Create Movie & Showtimes"}
+              ? "Save Changes"
+              : "Create Movie & Showtimes"}
         </Button>
       </div>
     </form>

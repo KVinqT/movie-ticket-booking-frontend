@@ -225,9 +225,9 @@ export interface UpdateProfilePayload {
 
 // ── Admin edit movie ──────────────────────────────────────────────────────
 
-// endpoint: PATCH /admin/movies/:id
-// method: PATCH
-// payload: EditMoviePayload  (only the fields the admin wants to change)
+// endpoint: PUT /movies/:id
+// method: PUT
+// payload: EditMoviePayload
 // response: Movie
 export interface EditMoviePayload {
   movie_name?: string;
@@ -381,6 +381,7 @@ export interface ServerSeat {
   seat_type: SeatType;
   base_price: string;   // decimal string e.g. "10000.00"
   is_active: 0 | 1;    // integer, not boolean
+  is_booked: boolean;   // server-computed availability flag
   created_at: string;
   updated_at: string;
 }
@@ -417,8 +418,7 @@ export interface ServerBookingDetail {
 /** Theater with seat list and server-computed seat counts */
 export interface ServerTheaterWithSeats extends Theater {
   total_seats: number;
-  active_seats: number;
-  booked_seats: number;
+  is_booked: boolean;   // true when every seat in this showtime is booked
   seats: ServerSeat[];
 }
 
@@ -449,17 +449,11 @@ export interface CreateBookingPayloadV2 {
 
 /**
  * Derives SeatAvailability[] from a ServerShowtime.
- * Seats appearing in any non-cancelled booking are marked "booked".
+ * Uses the server-computed `is_booked` flag on each seat directly.
  */
 export function deriveSeatsFromShowtime(
   showtime: ServerShowtime,
 ): SeatAvailability[] {
-  const bookedIds = new Set(
-    showtime.bookings
-      .filter((b) => b.status !== "cancelled")
-      .flatMap((b) => b.seats.map((s) => s.seat_id)),
-  );
-
   return showtime.theater.seats.map((s) => ({
     id: s.id,
     theater_id: s.theater_id,
@@ -469,7 +463,7 @@ export function deriveSeatsFromShowtime(
     seat_type: s.seat_type,
     base_price: parseFloat(s.base_price),
     is_active: s.is_active === 1,
-    status: bookedIds.has(s.id) ? "booked" : "available",
+    status: s.is_booked ? "booked" : "available",
   }));
 }
 
@@ -507,7 +501,7 @@ export interface ServerUserBooking {
     status: ShowtimeStatus;
     theater: Theater;
     movie: Movie;
-  };
+  } | null;
   seats: ServerBookingSeat[];
 }
 

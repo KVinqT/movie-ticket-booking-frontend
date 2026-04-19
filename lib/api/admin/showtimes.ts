@@ -26,22 +26,26 @@ export function toServerDatetime(localDatetime: string): string {
   return localDatetime.replace("T", " ") + ":00";
 }
 
-// ── API function ──────────────────────────────────────────────────────────────
+// ── API functions ─────────────────────────────────────────────────────────────
 
-async function createUpdateShowtimes(
+async function createShowtimes(
   payload: CreateUpdateShowtimesPayload,
 ): Promise<void> {
   await http.post("/showtimes/create_update", payload);
 }
 
-// ── Hook ──────────────────────────────────────────────────────────────────────
+// ── Hooks ─────────────────────────────────────────────────────────────────────
 
 /**
- * Mutation for creating or updating a batch of showtimes for a single theater.
- * Call once per distinct theater_id when the form has multiple theaters.
+ * Mutation for creating or updating a batch of showtimes via
+ * POST /showtimes/create_update.
+ *
+ * In edit mode pass ALL showtimes for the theater (existing ids + new id=0
+ * entries). The server replaces the existing set with the incoming payload.
+ * Call once per distinct theater_id.
  */
 export function useCreateUpdateShowtimes() {
   return useMutation({
-    mutationFn: createUpdateShowtimes,
+    mutationFn: createShowtimes,
   });
 }
