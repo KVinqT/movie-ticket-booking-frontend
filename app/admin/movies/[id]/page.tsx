@@ -35,14 +35,17 @@ export default function AdminMovieDetail({ params }: Props) {
       <div className="py-20 text-center text-red-400">Movie not found.</div>
     );
   }
-  console.log("Active showtime", activeShowtime);
-
   // Stats computed from the selected showtime
   const theater = activeShowtime?.theater;
   const bookings = activeShowtime?.bookings ?? [];
-  const revenue = bookings
-    .filter((b) => b.status !== "cancelled")
-    .reduce((sum, b) => sum + parseFloat(b.total_amount), 0);
+  const activeBookings = bookings.filter((b) => b.status !== "cancelled");
+  const bookedSeats = activeBookings.reduce((sum, b) => sum + b.seats.length, 0);
+  const totalSeats = theater?.total_seats ?? 0;
+  const availableSeats = totalSeats - bookedSeats;
+  const revenue = activeBookings.reduce(
+    (sum, b) => sum + parseFloat(b.total_amount),
+    0,
+  );
 
   return (
     <div className="flex flex-col gap-8">
@@ -128,12 +131,9 @@ export default function AdminMovieDetail({ params }: Props) {
       {activeShowtime && theater && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: "Total Bookings", value: bookings.length },
-            { label: "Booked Seats", value: theater.booked_seats },
-            {
-              label: "Available Seats",
-              value: theater.active_seats - theater.booked_seats,
-            },
+            { label: "Total Bookings", value: activeBookings.length },
+            { label: "Booked Seats", value: bookedSeats },
+            { label: "Available Seats", value: availableSeats },
             { label: "Revenue", value: formatPrice(revenue) },
           ].map(({ label, value }) => (
             <div key={label} className="flex flex-col p-4 rounded-xl border">

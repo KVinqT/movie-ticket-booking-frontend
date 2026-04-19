@@ -1,22 +1,9 @@
 "use client";
 
 import { ColumnDef } from "@tanstack/react-table";
-import { Badge } from "@/components/ui/badge";
-import type { ServerBookingDetail, BookingStatus } from "@/lib/api/types";
+import type { ServerBookingDetail } from "@/lib/api/types";
 import { formatDate } from "@/lib/date";
 import { formatPrice } from "@/lib/currency";
-import { getBookingStatusLabel } from "@/lib/booking";
-
-function statusVariant(status: BookingStatus) {
-  switch (status) {
-    case "confirmed":
-      return "default";
-    case "pending":
-      return "secondary";
-    case "cancelled":
-      return "outline";
-  }
-}
 
 export const bookingColumns: ColumnDef<ServerBookingDetail>[] = [
   {
@@ -40,8 +27,9 @@ export const bookingColumns: ColumnDef<ServerBookingDetail>[] = [
     id: "seats",
     header: "Seats",
     cell: ({ row }) => {
-      // Server returns `seats` (not `booking_seats`)
-      const names = row.original.seats.map((bs) => bs.seat.seat_name);
+      const names = row.original.seats
+        .map((bs) => bs.seat?.seat_name)
+        .filter(Boolean) as string[];
       return (
         <div className="flex flex-wrap gap-1">
           {names.map((name) => (
@@ -61,18 +49,8 @@ export const bookingColumns: ColumnDef<ServerBookingDetail>[] = [
     header: "Amount",
     cell: ({ row }) => (
       <span className="font-medium text-sm">
-        {/* total_amount is a decimal string from the server */}
         {formatPrice(row.original.total_amount)}
       </span>
-    ),
-  },
-  {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ row }) => (
-      <Badge variant={statusVariant(row.original.status)}>
-        {getBookingStatusLabel(row.original.status)}
-      </Badge>
     ),
   },
   {
