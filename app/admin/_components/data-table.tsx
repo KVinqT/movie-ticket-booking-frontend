@@ -138,7 +138,8 @@ export function DataTable<TData, TValue>({
                 (col) =>
                   col.getCanFilter() &&
                   col.id !== primarySearchColumn &&
-                  col.columnDef.header,
+                  col.columnDef.header &&
+                  !["id", "created_at", "updated_at", "booked_at"].includes(col.id),
               )
               .map((col) => (
                 <div key={col.id} className="space-y-1">
